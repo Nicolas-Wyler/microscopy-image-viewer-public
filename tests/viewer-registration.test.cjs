@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict');const {detect,fit}=require('../viewer-registration.js');
+test('finds a rigid mask layout in noisy image pixels and recovers its common rotation',()=>{
+ const W=320,H=220,theta=3*Math.PI/180,c=Math.cos(theta),s=Math.sin(theta),model=[];for(const y of [-60,-20,20,60])for(const x of [-45,45])model.push({x,y,width:20,height:20});const pixels=new Uint8Array(W*H);pixels.fill(100);for(const p of model){const x=c*p.x-s*p.y+160,y=s*p.x+c*p.y+110;for(let j=Math.round(y)-10;j<=Math.round(y)+10;j++)for(let i=Math.round(x)-10;i<=Math.round(x)+10;i++)if(i>=0&&i<W&&j>=0&&j<H)pixels[j*W+i]=180;}const candidates=detect(pixels,W,H,model);const result=fit(model,candidates);assert.ok(result);assert.equal(result.matches.length,8);assert.ok(Math.abs(result.angle-theta)<.02);assert.ok(Math.abs(result.tx-160)<2);assert.ok(Math.abs(result.ty-110)<2);
+});
+test('does not claim a solution when the zero-order pattern is absent',()=>{const model=[{x:0,y:0,width:20,height:20},{x:50,y:0,width:20,height:20},{x:0,y:50,width:20,height:20}];assert.equal(fit(model,[{x:5,y:5,width:20,height:20}]),null);});

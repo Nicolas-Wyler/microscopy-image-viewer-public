@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Local microscopy image viewer.">
+  <title>Microscopy image viewer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23d8eb87'/%3E%3Cpath d='M11 11h7v7h-7zm11 0h7v7h-7zm-11 11h7v7h-7zm11 0h7v7h-7z' fill='%23171b1d'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="folder-loader.css">
+  <script defer src="folder-validator.js"></script>
+  <script defer src="table-project-store.js"></script>
+  <script defer src="sidecar-magnification.js"></script>
+  <script defer src="vendor/pako-inflate.min.js"></script>
+  <script defer src="vendor/utif.js"></script>
+  <script defer src="tiff-image.js"></script>
+  <script defer src="image-table-state.js"></script>
+  <script defer src="image-table.js"></script>
+  <script defer src="cjob-model.js"></script>
+  <script defer src="spot-grouping.js"></script>
+  <script defer src="cjob-view.js"></script>
+  <script defer src="mask-design-editor.js"></script>
+  <script defer src="project-sidebar.js"></script>
+  <script defer src="folder-loader.js"></script>
+  <link rel="stylesheet" href="styles.css?v=om13-inner-pair-2">
+  <script defer src="data.js?v=1.0.6-om13"></script>
+  <script defer src="project-storage.js?v=om13-1"></script>
+  <script defer src="viewer-session.js?v=1.0.7-om13"></script>
+  <script defer src="workspace-navigation.js"></script>
+  <script defer src="popup-drag.js?v=1.0.6-om13"></script>
+  <script defer src="mask-layout.js?v=1.0.6-om13"></script>
+  <script defer src="spot-colors.js?v=om13-inner-pair-2"></script>
+  <script defer src="spot-overview.js?v=om13-inner-pair-2"></script>
+  <script defer src="grating-geometry.js?v=om13-inner-pair-2"></script>
+  <script defer src="grating-storage.js?v=om13-inner-pair-2"></script>
+  <script defer src="rectangle-history.js?v=om13-integral-1"></script>
+  <script defer src="rectangle-export.js?v=om13-integral-1"></script>
+  <script defer src="rectangle-import.js?v=om13-integral-1"></script>
+  <script defer src="sidebars.js?v=om13-inner-pair-3"></script>
+  <script defer src="edge-filters.js?v=1.0.6-om13"></script>
+  <script defer src="edge-views.js?v=1.0.6-om13"></script>
+  <script defer src="diffraction.js?v=1.0.6-om13"></script>
+  <script defer src="distance-guides.js?v=1.0.6-om13"></script>
+  <script defer src="compare-histograms.js?v=1.0.6-om13"></script>
+  <script defer src="compare-extremes.js?v=1.0.6-om13"></script>
+  <script defer src="spot-compare.js?v=om13-integral-1"></script>
+  <script defer src="distance-analysis.js?v=1.0.6-om13"></script>
+  <script defer src="analysis-calculator.js?v=1.0.6-om13"></script>
+  <script defer src="canny-midpoints.js?v=1.0.6-om13"></script>
+  <script defer src="filter-parameters.js?v=1.0.7-om13"></script>
+  <script defer src="rectangle-union.js?v=1.0.6-om13"></script>
+  <script defer src="rectangle-snap.js?v=om13-integral-1"></script>
+  <script defer src="rectangle-pair-snap.js?v=1.0.6-om13"></script>
+  <script defer src="integral-position.js?v=om13-1"></script>
+  <script defer src="integral-export.js?v=om13-1"></script>
+  <script defer src="integral-profile.js?v=om13-1"></script>
+  <script defer src="rectangle-menu.js?v=om13-integral-1"></script>
+  <script defer src="grating-overlay.js?v=om13-integral-1"></script>
+  <script defer src="viewport-geometry.js?v=1.0.6-om13"></script>
+  <script defer src="pitch-ruler.js?v=1.0.6-om13"></script>
+  <script defer src="pixel-grid.js?v=1.0.6-om13"></script>
+  <script defer src="mask-picker.js?v=om13-inner-pair-2"></script>
+  <script defer src="sidecar-viewer.js?v=1.0.6-om13"></script>
+  <script defer src="app.js?v=om13-integral-1"></script>
+  <script id="project-csv" type="application/json" data-project="om13-imagefree-fork">""</script>
+</head>
+<body>
+  <div id="folder-loader" class="folder-loader">
+    <aside id="project-sidebar" class="project-sidebar" aria-label="Project details">
+      <div id="resize-project-sidebar" class="project-sidebar-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize project sidebar" aria-controls="project-sidebar" title="Drag or use arrow keys to resize the sidebar"></div>
+      <button id="toggle-project-sidebar" class="project-sidebar-toggle" type="button" aria-expanded="true" aria-controls="project-sidebar-content" aria-label="Collapse project sidebar">‹</button>
+      <div id="project-sidebar-content" class="project-sidebar-content">
+      <h2>Project <span class="project-version">v0.1.0</span></h2>
+      <div class="project-switch-actions"><button id="new-project" type="button" disabled>New project</button><button id="previous-project" type="button" hidden disabled>Previous project</button></div>
+      <label for="project-title">Project title</label>
+      <input id="project-title" type="text" placeholder="Project title" autocomplete="off">
+      <label for="project-mask">Mask</label>
+      <input id="project-mask" type="text" placeholder="Mask" autocomplete="off">
+      <label for="project-wavelength">Set wavelength (nm)</label>
+      <input id="project-wavelength" type="text" placeholder="e.g. 3.1 nm" autocomplete="off">
+      <label for="project-gap">Set gap (µm)</label>
+      <input id="project-gap" type="text" placeholder="e.g. 2000" autocomplete="off">
+      <label for="project-resist">Resist</label>
+      <input id="project-resist" type="text" placeholder="Resist" autocomplete="off">
+      <label for="project-description">Description</label>
+      <textarea id="project-description" rows="4" placeholder="Notes about this project"></textarea>
+      <label for="project-dose">Dose (mJ/cm²)</label>
+      <div class="dose-entry"><input id="project-dose" type="number" min="0" step="any" placeholder="None" autocomplete="off" disabled><div class="background-actions"><button type="button" id="dose-apply" aria-label="Apply dose to selected images" title="Apply to selected images" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button></div></div>
+      <section class="cjob-panel" aria-label="Mask Design">
+        <label>Mask Design</label>
+        <p id="cjob-filename" class="cjob-filename">No CJOB loaded</p>
+        <div class="cjob-actions"><button id="cjob-load" type="button" disabled>Load CJOB</button><button id="mask-edit" type="button" disabled>Edit</button></div>
+        <label for="cjob-zone">Zone</label>
+        <select id="cjob-zone"><option value="everything">Everything</option></select>
+        <input id="cjob-zone-rename-input" type="text" aria-label="Rename zone" aria-describedby="cjob-zone-rename-error" maxlength="80" autocomplete="off" hidden>
+        <p id="cjob-zone-rename-error" class="background-status" role="status"></p>
+        <div class="background-actions zone-actions">
+          <button type="button" id="cjob-view" aria-label="View mask design" title="View mask design" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button type="button" id="cjob-zone-apply" aria-label="Apply zone to selected images" title="Apply to selected images" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
+          <button type="button" id="cjob-zone-rename" aria-label="Rename zone" title="Rename zone" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-.8L20 7l-3-3L5 16l-1 4zM14.8 6.2l3 3"/></svg></button>
+          <button type="button" id="cjob-zone-remove" aria-label="Remove zone" title="Remove zone" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+        </div>
+        <input id="cjob-input" type="file" accept=".cjob" hidden>
+        <p id="cjob-status" class="background-status" role="status"></p><p id="cjob-warning" class="background-status" role="status"></p>
+      </section>
+      <section class="background-panel" aria-label="Background images">
+        <label for="background-selector">Background images</label>
+        <select id="background-selector" disabled><option value="">None</option><option value="__load__">Load…</option></select>
+        <input id="background-input" type="file" accept=".tif,.tiff,image/tiff" hidden>
+        <input id="background-rename-input" type="text" aria-label="Rename background" hidden>
+        <div class="background-actions">
+          <button type="button" id="background-view" aria-label="View background" title="View background" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button type="button" id="background-apply" aria-label="Apply background to selected images" title="Apply to selected images" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
+          <button type="button" id="background-rename" aria-label="Rename background" title="Rename background" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-.8L20 7l-3-3L5 16l-1 4zM14.8 6.2l3 3"/></svg></button>
+          <button type="button" id="background-remove" aria-label="Remove background" title="Remove background" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+        </div>
+        <p id="background-status" class="background-status" role="status" aria-live="polite"></p>
+      </section>
+      </div>
+      <div class="project-sidebar-nav"><p id="project-save-status" class="project-save-status" role="status" data-state="loading">Restoring project…</p><a id="open-image-viewer" class="workspace-link" href="viewer.html"><span>Image viewer</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg></a></div>
+    </aside>
+    <main class="loader-main">
+      <div class="loader-content">
+        <section id="loader-success">
+          <div class="image-list-heading"><div><h1>Images</h1><p class="loader-lead">Drag folders or TIFF images into the table. Drag rows to change their order.</p></div><span id="loaded-file-count" class="image-count">0 images</span></div>
+          <div id="loader-warning" class="loader-warning" role="status" hidden></div>
+          <div id="loader-error" class="loader-error" role="alert" hidden></div>
+          <p id="loader-progress" class="loader-progress" role="status" aria-live="polite"></p>
+          <div id="folder-drop" class="image-list-frame"><table class="image-list" aria-label="Loaded images"><thead><tr><th scope="col">#</th><th scope="col">Image</th><th scope="col">Filename <button type="button" class="image-sort" data-sort="filename" aria-label="Sort by Filename" title="Sort by Filename"><span class="sort-arrows" aria-hidden="true"><span class="sort-up">▲</span><span class="sort-down">▼</span></span></button></th><th scope="col">Name <button type="button" class="image-sort" data-sort="name" aria-label="Sort by Name" title="Sort by Name"><span class="sort-arrows" aria-hidden="true"><span class="sort-up">▲</span><span class="sort-down">▼</span></span></button></th><th scope="col">Dose (mJ/cm²) <button type="button" class="image-sort" data-sort="dose" aria-label="Sort by Dose (mJ/cm²)" title="Sort by Dose (mJ/cm²)"><span class="sort-arrows" aria-hidden="true"><span class="sort-up">▲</span><span class="sort-down">▼</span></span></button></th><th scope="col">Background <button type="button" class="image-sort" data-sort="background" aria-label="Sort by Background" title="Sort by Background"><span class="sort-arrows" aria-hidden="true"><span class="sort-up">▲</span><span class="sort-down">▼</span></span></button></th><th scope="col">Zone <button type="button" class="image-sort" data-sort="zone" aria-label="Sort by Zone" title="Sort by Zone"><span class="sort-arrows" aria-hidden="true"><span class="sort-up">▲</span><span class="sort-down">▼</span></span></button></th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead><tbody id="image-table-body"></tbody></table>
+            <details id="add-images-menu" class="add-images-menu"><summary>＋ Add images or folder</summary><div class="add-images-options"><button id="select-images" type="button">Choose images…</button><button id="select-folder" type="button">Choose folder…</button></div></details>
+            <input id="image-input" type="file" accept=".tif,.tiff,image/tiff" multiple hidden>
+            <input id="folder-input" type="file" webkitdirectory multiple hidden>
+          </div>
+          <p class="loader-note">Click a thumbnail to inspect the image. Removing an image only removes it from this list.</p>
+          <p id="image-list-announcement" class="visually-hidden" aria-live="polite"></p>
+        </section>
+        <dialog id="mask-editor" class="mask-editor" aria-labelledby="mask-editor-title">
+          <header class="cjob-header"><div><h2 id="mask-editor-title">Edit mask design</h2><p id="mask-editor-subtitle"></p></div><button id="mask-editor-close" type="button" aria-label="Close mask design editor">×</button></header>
+          <div class="mask-editor-content">
+            <div class="mask-editor-top"><label for="mask-design-name">Design name</label><input id="mask-design-name" type="text" maxlength="100" autocomplete="off"><button id="mask-remove-cjob" type="button" hidden>Remove CJOB</button></div>
+            <p id="mask-editor-notice" class="mask-editor-notice"></p><label class="mask-sadp"><input id="mask-sadp" type="checkbox"> SADP (finished pitch is half the designed pitch)</label>
+            <div class="mask-editor-table-wrap"><table class="mask-editor-table"><thead><tr><th>Pitch (nm)</th><th>x pos (µm)</th><th>y pos (µm)</th><th>Width (µm)</th><th>Height (µm)</th><th>Electron dose (µC/cm²)</th><th><span class="visually-hidden">Delete</span></th></tr></thead><tbody id="mask-editor-body"></tbody></table></div>
+            <button id="mask-add-row" type="button">＋ Add grating</button>
+            <p id="mask-editor-error" class="mask-editor-error" role="status"></p>
+            <div class="mask-preview-heading"><h3>Mask design preview</h3><span>Vertical gratings · schematic lines · no diffraction spots</span></div>
+            <svg id="mask-preview" role="img" aria-label="Mask design preview"></svg><p id="mask-preview-empty" class="mask-editor-notice">Add gratings to see the preview.</p>
+            <details id="cjob-geometry-editor" class="cjob-geometry-editor"><summary>Pattern geometry</summary>
+              <p>Enter missing dimensions or diffraction properties for each pattern. Dimensions are in µm; diffraction pitch is in nm.</p>
+              <form id="cjob-geometry-form"><div class="cjob-geometry-scroll"><table><thead><tr><th>Pattern</th><th>Width (µm)</th><th>Height (µm)</th><th>Diffraction pitch (nm)</th><th>Orientation</th></tr></thead><tbody></tbody></table></div><button id="cjob-geometry-save" type="submit">Apply geometry</button><span id="cjob-geometry-error" role="status"></span></form>
+            </details>
+            <div class="mask-editor-footer"><button id="mask-editor-save" type="button">Save design</button></div>
+          </div>
+        </dialog>
+        <dialog id="cjob-dialog" class="cjob-dialog" aria-labelledby="cjob-title">
+          <header class="cjob-header"><div><h2 id="cjob-title">Mask overview</h2><p id="cjob-dialog-file"></p></div><button id="cjob-close" type="button" aria-label="Close mask overview">×</button></header>
+          <div class="cjob-content"><div class="cjob-toolbar"><button id="cjob-add-zone" type="button" disabled>Add Zone</button><span id="cjob-selection-count" aria-live="polite">Select spots to create a zone</span><span id="cjob-parameters"></span></div>
+            <form id="cjob-zone-form" class="cjob-zone-form" hidden><label for="cjob-zone-name">Zone name</label><input id="cjob-zone-name" type="text" autocomplete="off" maxlength="80" required><button type="submit">Save</button><button id="cjob-zone-cancel" type="button">Cancel</button><span id="cjob-zone-error" role="status"></span></form>
+            <label class="cjob-inner-switch"><input id="cjob-inner-together" type="checkbox"> Treat neighboring inner spots as one object</label>
+            <p class="cjob-select-help">Click or Shift-click spots to select them, or drag a box. Press ⌘A to select all.</p>
+            <div class="cjob-legend"><span><i class="zero"></i>Grating / zero order</span><span><i class="minus"></i>−1 order</span><span><i class="plus"></i>+1 order</span></div>
+            <div id="cjob-plots"></div>
+            <p id="cjob-notes" class="cjob-notes"></p><div id="cjob-details" class="cjob-details"></div>
+          </div>
+        </dialog>
+        <div id="image-inspector" class="image-inspector" hidden role="dialog" aria-modal="true" aria-labelledby="inspector-title">
+          <div class="inspector-panel">
+            <header class="inspector-header"><div><h2 id="inspector-title">Image</h2><p id="inspector-meta"></p></div><div class="inspector-actions"><button id="inspector-fit" type="button">Fit</button><button id="inspector-native" type="button">100%</button><button id="inspector-close" class="inspector-close" type="button" aria-label="Close image inspector">×</button></div></header>
+            <div id="inspector-viewport" class="inspector-viewport"><div id="inspector-status" role="status">Loading image…</div><canvas id="inspector-canvas" hidden></canvas></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <aside id="left-sidebar" class="sidebar side-panel" aria-label="Exposure map and spots">
+    <div id="resize-left-sidebar" class="sidebar-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize left sidebar with Option and arrow keys" aria-controls="left-sidebar" title="Drag to resize the left sidebar"></div>
+    <button id="toggle-left-sidebar" class="sidebar-toggle" type="button" aria-expanded="true" aria-controls="left-sidebar-content" aria-label="Collapse left sidebar">‹</button>
+    <div id="left-sidebar-content" class="sidebar-content">
+    <header class="brand"><span class="brand-mark" aria-hidden="true">◫</span><div><strong>Image viewer</strong><span>Micrograph viewer · <span id="viewer-version" style="display:inline">v1.0.24</span></span></div></header>
+    <section class="map-section" aria-labelledby="map-heading">
+      <div class="section-heading"><h2 id="map-heading">Exposure map</h2><span class="count">0</span></div>
+      <p class="map-hint">Press an image square, then drag across the map to browse.</p>
+      <div id="exposure-map" class="exposure-map" role="group" aria-label="Exposure map, numbered by image"></div>
+      <p class="map-caption"><span class="legend-square" aria-hidden="true"></span> Image numbers · green marks rectangles</p>
+    </section>
+    <section class="spot-overview" aria-labelledby="spots-heading">
+      <div class="section-heading"><h2 id="spots-heading">Expected spots</h2><span class="spot-mask-name"></span></div>
+      <div id="spot-diagram" role="group" aria-label="Expected spots for both gratings"></div>
+      <p class="spot-caption">Top and Bottom show overlapping mask rows. Images are roughly aligned; nominal spot positions should be checked.</p>
+      <p id="spot-caption" class="spot-caption">Rows show mask grating pitch.</p>
+      <p id="rectangle-save-status" class="rectangle-save-status" role="status">Autosave on</p>
+    </section>
+    <section class="selection" aria-labelledby="selection-heading">
+      <div class="section-heading"><h2 id="selection-heading">Selected image</h2><span id="selected-number" class="selected-number">01</span></div>
+      <div class="dose"><span id="dose-value">Unknown</span><span class="unit">mJ/cm²</span></div>
+      <dl class="metadata">
+        <div><dt>Source</dt><dd id="source-name">—</dd></div>
+        <div><dt>Exposure field</dt><dd id="exposure-field">Unknown</dd></div>
+        <div><dt>Assumed gap</dt><dd id="assumed-gap" title="Nominal gap">—</dd></div>
+        <div><dt>Gap correction</dt><dd id="gap-correction-readout" title="Gap correction">0 µm</dd></div>
+        <div><dt>Magnification</dt><dd id="magnification">—</dd></div>
+        <div><dt>Native size</dt><dd class="size-readout"><span id="resolution">—</span><span id="resolution-um">—</span></dd></div>
+        <div><dt>Pixel size</dt><dd id="pixel-size">—</dd></div>
+        <div><dt>Sidecar</dt><dd><button type="button" id="open-sidecar" class="sidecar-button" disabled>View</button></dd></div>
+      </dl>
+      <p id="orientation-note" class="orientation-note" hidden></p>
+    </section>
+    <footer class="sidebar-footer"><span class="local-label"><i aria-hidden="true"></i> Local workspace</span><span></span></footer>
+    </div>
+  </aside>
+  <main>
+    <header class="viewer-header">
+      <div><p class="eyebrow">OPTICAL MICROSCOPY <span>/</span> Microscopy</p><h1 id="image-title">No image loaded</h1></div>
+      <div class="header-controls">
+      <div class="view-toggle picture-side-toggle" role="group" aria-label="Picture position">
+        <button id="side-top" type="button" aria-pressed="true" aria-label="Top picture">Top</button>
+        <button id="side-bottom" type="button" aria-pressed="false" aria-label="Bottom picture">Bottom</button>
+      </div>
+      <div class="view-toggle" role="group" aria-label="Image version for all doses">
+        <button id="view-cropped" aria-pressed="true" title="Full frames, roughly rotated and aligned using zero-order spots">Aligned</button>
+        <button id="view-original" aria-pressed="false" title="Original TIFF pixels, for all doses">Original TIFF</button>
+      </div>
+      <nav class="image-navigation" aria-label="Browse micrographs">
+        <button id="previous-image" class="icon-button" aria-label="Previous image" title="Previous image (←). Hold to browse at 10 fps."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+        <span id="image-counter" aria-live="polite">0 <span>/ 0</span></span>
+        <button id="next-image" class="icon-button" aria-label="Next image" title="Next image (→). Hold to browse at 10 fps."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+      </nav>
+      </div>
+    </header>
+    <div class="image-display-controls">
+      <div class="view-toggle filter-toggle" role="group" aria-label="Image display mode for all doses" aria-keyshortcuts="ArrowUp ArrowDown" title="↑ Previous display mode · ↓ Next display mode">
+        <button id="filter-image" type="button" aria-pressed="true">Image</button>
+        <button id="filter-scharr" type="button" aria-pressed="false" title="Smooth edge contrast using a Scharr gradient">Edge contrast</button>
+        <button id="filter-canny" type="button" aria-pressed="false" title="Select a rectangle to see green midpoints between black edges within 10 native pixels on each side.">Canny</button>
+      </div>
+      <button id="filter-parameters-toggle" type="button" aria-controls="filter-parameters" aria-expanded="false">Filter parameters</button>
+      <button id="toggle-grayscale" type="button" aria-controls="micrograph" aria-pressed="false" title="Display the micrograph in grayscale">B/W</button>
+      <button id="gap-correction-button" type="button" aria-controls="gap-correction-menu" aria-expanded="false">Gap correction</button>
+      <button id="clean-image" type="button" aria-controls="viewport" aria-pressed="false" title="Hide image overlays and lock spot editing. Drag to pan or scroll to zoom.">Clean image</button>
+      <button id="show-distances" type="button" aria-pressed="false" aria-controls="distance-guides" title="Show all matching zero-to-first-order distances in this image">
+        <svg viewBox="0 0 20 12" aria-hidden="true"><path d="M2 6h16M6 2 2 6l4 4m8-8 4 4-4 4"/></svg>Show distances
+      </button>
+    </div>
+    <div id="viewport" class="viewport" tabindex="0" aria-label="Micrograph. Scroll to zoom or drag to pan.">
+      <div id="image-frame"><img id="micrograph" alt="" draggable="false" hidden></div>
+      <svg id="compare-layer" aria-label="Choose diffraction spots to compare" hidden></svg>
+      <svg id="pitch-ruler" aria-hidden="true"></svg>
+      <svg id="pixel-grid" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden><path vector-effect="non-scaling-stroke"/></svg>
+      <svg id="canny-midpoints" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden><svg overflow="hidden"><g><path class="canny-contours" fill="#206b49"/><path class="canny-centres" fill="#00b84c"/></g></svg></svg>
+      <svg id="distance-guides" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Horizontal spot distances" hidden></svg>
+      <svg id="grating-overlay" xmlns="http://www.w3.org/2000/svg" aria-label="Editable grating outline" hidden>
+        <g id="grating-shape">
+          <rect id="grating-outline" class="grating-outline" data-action="move" tabindex="0" role="button" aria-haspopup="menu" aria-label="Move grating outline" fill="transparent"><title>Drag to move. ⌘-click to select multiple rectangles. C: Canny, M: midpoint, R or Backspace: remove.</title></rect>
+          <path class="grating-union" fill="none" aria-hidden="true" hidden></path>
+          <path class="grating-interior" fill="none" aria-hidden="true" hidden></path>
+          <g class="snap-ticks" aria-hidden="true" hidden><path class="tick-keyline"/><path/></g>
+          <path class="integral-derivative" aria-hidden="true" fill="none" hidden></path>
+          <circle class="derivative-extremum derivative-maximum" aria-hidden="true" r="3.5" hidden></circle>
+          <circle class="derivative-extremum derivative-minimum" aria-hidden="true" r="3.5" hidden></circle>
+          <path class="integral-maximum" aria-hidden="true" fill="none" hidden></path>
+          <path class="integral-maximum-cross" aria-hidden="true" fill="none" hidden></path>
+          <path class="integral-profile" aria-hidden="true" fill="none" hidden></path>
+          <path class="integral-edges" aria-hidden="true" fill="none" hidden></path>
+          <path class="integral-centre" aria-hidden="true" fill="none" hidden></path>
+          <path id="grating-centre" class="grating-centre" d="M-4 0H4M0 -4V4" aria-hidden="true"/>
+          <line class="rotation-stem" aria-hidden="true"/>
+          <g id="handle-left" class="grating-handle side-horizontal" data-action="left" tabindex="0" role="button" aria-label="Resize left side"><rect class="grating-hit" x="-8" y="-9" width="16" height="18"/><rect class="corner-mark" x="-2.5" y="-4" width="5" height="8" rx="1"/></g>
+          <g id="handle-right" class="grating-handle side-horizontal" data-action="right" tabindex="0" role="button" aria-label="Resize right side"><rect class="grating-hit" x="-8" y="-9" width="16" height="18"/><rect class="corner-mark" x="-2.5" y="-4" width="5" height="8" rx="1"/></g>
+          <g id="handle-top" class="grating-handle side-vertical" data-action="top" tabindex="0" role="button" aria-label="Resize top side"><rect class="grating-hit" x="-9" y="-8" width="18" height="16"/><rect class="corner-mark" x="-4" y="-2.5" width="8" height="5" rx="1"/></g>
+          <g id="handle-bottom" class="grating-handle side-vertical" data-action="bottom" tabindex="0" role="button" aria-label="Resize bottom side"><rect class="grating-hit" x="-9" y="-8" width="18" height="16"/><rect class="corner-mark" x="-4" y="-2.5" width="8" height="5" rx="1"/></g>
+          <g id="handle-top-left" class="grating-handle corner-top-left" data-action="top-left" tabindex="0" role="button" aria-label="Resize top left corner"><title>Move both adjoining sides; opposite corner stays fixed</title><rect class="grating-hit" x="-11" y="-11" width="22" height="22"/><rect class="corner-mark" x="-4" y="-4" width="8" height="8" rx="1"/></g>
+          <g id="handle-top-right" class="grating-handle corner-top-right" data-action="top-right" tabindex="0" role="button" aria-label="Resize top right corner"><title>Move both adjoining sides; opposite corner stays fixed</title><rect class="grating-hit" x="-11" y="-11" width="22" height="22"/><rect class="corner-mark" x="-4" y="-4" width="8" height="8" rx="1"/></g>
+          <g id="handle-bottom-left" class="grating-handle corner-bottom-left" data-action="bottom-left" tabindex="0" role="button" aria-label="Resize bottom left corner"><title>Move both adjoining sides; opposite corner stays fixed</title><rect class="grating-hit" x="-11" y="-11" width="22" height="22"/><rect class="corner-mark" x="-4" y="-4" width="8" height="8" rx="1"/></g>
+          <g id="handle-bottom-right" class="grating-handle corner-bottom-right" data-action="bottom-right" tabindex="0" role="button" aria-label="Resize bottom right corner"><title>Move both adjoining sides; opposite corner stays fixed</title><rect class="grating-hit" x="-11" y="-11" width="22" height="22"/><rect class="corner-mark" x="-4" y="-4" width="8" height="8" rx="1"/></g>
+          <g id="handle-rotate" class="grating-handle corner-rotate" data-action="rotate" tabindex="0" role="button" aria-label="Rotate rectangle"><title>Rotate around centre</title><circle class="grating-hit" r="14"/><circle class="corner-mark" r="9"/><text class="handle-icon" text-anchor="middle" dominant-baseline="central">↻</text></g>
+        </g>
+      </svg>
+      <svg id="grating-edit-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden></svg>
+      <div id="image-status" class="image-status" role="status">Loading micrograph…</div>
+      <div class="viewport-tag"><span id="image-version">ALIGNED CROP</span> <span>·</span> <span id="image-channels">8-bit grayscale</span></div>
+      <div id="scale-bar" class="scale-bar" role="img" aria-label="Scale bar" hidden><span id="scale-label"></span><div id="scale-line"></div></div>
+      <div class="zoom-toolbar" role="group" aria-label="Image zoom">
+        <button id="fit-image" class="text-button" aria-pressed="true" title="Fit image (F)">Fit</button>
+        <button id="actual-size" class="text-button" aria-pressed="false" title="One image pixel per CSS pixel (1)">100%</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button id="zoom-out" class="icon-button" aria-label="Zoom out" title="Zoom out (−)">−</button>
+        <output id="zoom-value" aria-label="Current zoom">—</output>
+        <button id="zoom-in" class="icon-button" aria-label="Zoom in" title="Zoom in (+)">+</button>
+      </div>
+    </div>
+    <section class="crop-readout" aria-label="Crop region in original TIFF coordinates">
+      <div class="crop-readout-heading"><strong>Aligned view in original TIFF</strong><span>Origin at bottom left · X right, Y up</span></div>
+      <dl>
+        <div><dt>Centre (X, Y)</dt><dd id="crop-centre">—</dd></div>
+        <div><dt>Width × height</dt><dd id="crop-size">—</dd></div>
+        <div><dt>Rotation</dt><dd id="crop-angle">—</dd></div>
+      </dl>
+    </section>
+    <footer class="viewer-footer"><span id="view-status" aria-live="polite">Aligned crop · overlay position provisional</span><span class="keyboard-hint">← → dose <b>·</b> ↑ ↓ mode <b>·</b> Space copy <b>·</b> ⇧Space copy + snap</span></footer>
+  </main>
+  <aside id="right-sidebar" class="rectangle-sidebar side-panel" aria-label="Position and analysis for the selected dose">
+    <div id="resize-right-sidebar" class="sidebar-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize right sidebar with Option and arrow keys" aria-controls="right-sidebar" title="Drag to resize the right sidebar"></div>
+    <button id="toggle-right-sidebar" class="sidebar-toggle" type="button" aria-expanded="true" aria-controls="right-sidebar-content" aria-label="Collapse right sidebar">›</button>
+    <div id="right-sidebar-content" class="sidebar-content">
+      <div id="right-sidebar-tabs" class="view-toggle" role="tablist" aria-label="Sidebar view">
+        <button id="position-tab" type="button" role="tab" aria-controls="position-panel" aria-selected="true">Position</button>
+        <button id="analysis-tab" type="button" role="tab" aria-controls="analysis-panel" aria-selected="false" tabindex="-1">Analysis</button>
+        <button id="compare-tab" type="button" role="tab" aria-controls="compare-panel" aria-selected="false" tabindex="-1">Compare</button>
+      </div>
+      <section id="position-panel" class="sidebar-view" role="tabpanel" aria-labelledby="position-tab">
+        <div class="rectangle-scroll">
+          <div class="section-heading rectangle-heading"><h2>Rectangles</h2><span id="rectangle-selection-count" aria-live="polite" title="⌘A: select all · C: snap to Canny · M: snap to midpoint · R or Backspace: remove"></span><span id="rectangle-count" class="count">0</span></div>
+          <p id="rectangle-coordinate-note" class="rectangle-note"></p>
+          <p class="rectangle-note position-aspect-formula">Δ = (H / W − 1) × 100</p>
+          <p id="rectangle-empty" class="rectangle-note">Choose a spot on the left to add a rectangle.</p>
+          <div id="rectangle-list"></div>
+        </div>
+      </section>
+      <section id="analysis-panel" class="sidebar-view" role="tabpanel" aria-labelledby="analysis-tab" tabindex="0" hidden>
+        <div class="rectangle-scroll">
+          <section id="analysis-calculator" class="analysis-calculator is-disabled" aria-label="Calculate using all images">
+            <div class="analysis-calc-heading">
+              <input id="analysis-calc-enabled" type="checkbox" aria-label="Enable all-image calculation">
+              <span>Calculate:</span>
+              <div class="view-toggle" role="group" aria-label="Calculate wavelength or gap">
+                <button id="analysis-calc-lambda" type="button" aria-pressed="true" disabled>λ</button>
+                <button id="analysis-calc-gap" type="button" aria-pressed="false" disabled>Gap</button>
+              </div>
+              <button id="analysis-calc-gear" class="analysis-calc-gear" type="button" aria-label="Calculation settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="analysis-calc-settings" title="Calculation settings" disabled>⚙︎</button>
+            </div>
+            <div class="analysis-calc-body">
+              <div class="analysis-calc-input"><label id="analysis-calc-label" for="analysis-calc-value">Gap (µm)</label><input id="analysis-calc-value" type="number" step="any" value="300" disabled></div>
+              <math id="analysis-calc-formula-lambda" display="block" aria-label="Wavelength equals Ru mask pitch times r divided by the square root of gap squared plus r squared">
+                <mi>λ</mi><mo>=</mo><mfrac><mrow><mi>P</mi><mi>r</mi></mrow><msqrt><msup><mi>g</mi><mn>2</mn></msup><mo>+</mo><msup><mi>r</mi><mn>2</mn></msup></msqrt></mfrac>
+              </math>
+              <math id="analysis-calc-formula-gap" display="block" aria-label="Gap equals r divided by wavelength times the square root of Ru mask pitch squared minus wavelength squared" hidden>
+                <mi>g</mi><mo>=</mo><mfrac><mi>r</mi><mi>λ</mi></mfrac><msqrt><msup><mi>P</mi><mn>2</mn></msup><mo>−</mo><msup><mi>λ</mi><mn>2</mn></msup></msqrt>
+              </math>
+              <p class="analysis-calc-note">P is the mask grating pitch. Each r is a horizontal 0-to-first-order distance in µm. One input applies to all images.</p>
+              <figure class="analysis-calc-figure"><figcaption id="analysis-calc-caption">Wavelength · all images</figcaption><div id="analysis-calc-histogram"></div></figure>
+              <p id="analysis-calc-status" role="status">Enable to calculate from all measured distances.</p>
+            </div>
+          </section>
+          <div class="section-heading rectangle-heading"><h2>Horizontal distances</h2><span id="analysis-count" class="count">0</span></div>
+          <p id="analysis-context" class="rectangle-note"></p>
+          <p id="analysis-empty" class="rectangle-note">Add order 0 and a matching −1 or +1 rectangle to measure their distance.</p>
+          <div id="analysis-distances"></div>
+        </div>
+      </section>
+      <section id="compare-panel" class="sidebar-view" role="tabpanel" aria-labelledby="compare-tab" hidden>
+        <h2>Wavelength comparisons</h2>
+        <button id="compare-extremes" type="button" class="compare-extremes" title="For each image and side, compare smallest and largest available pitches for same and cross e-dose combinations using the outward order">Compare smallest ↔ largest · outward order</button>
+        <p id="compare-extremes-status" class="rectangle-note" role="status">Each image and side is handled separately; same and cross e-dose combinations are included. Outward order is −1 left, +1 right.</p>
+        <div class="comparison-formula">
+          <math display="block" aria-label="Wavelength equals the square root of the ratio of the difference of squared radius–mask-pitch products to the difference of squared radii">
+            <mi>λ</mi><mo>=</mo><msqrt><mfrac>
+              <mrow><msubsup><mi>r</mi><mi>i</mi><mn>2</mn></msubsup><msubsup><mi>P</mi><mi>i</mi><mn>2</mn></msubsup><mo>−</mo><msubsup><mi>r</mi><mi>j</mi><mn>2</mn></msubsup><msubsup><mi>P</mi><mi>j</mi><mn>2</mn></msubsup></mrow>
+              <mrow><msubsup><mi>r</mi><mi>i</mi><mn>2</mn></msubsup><mo>−</mo><msubsup><mi>r</mi><mi>j</mi><mn>2</mn></msubsup></mrow>
+            </mfrac></msqrt>
+          </math>
+          <p>P is the mask grating pitch. Each r is a horizontal 0-to-first-order distance in µm. Both gratings share the same assumed gap.</p>
+        </div>
+        <p id="compare-result" role="status"></p>
+        <div class="comparison-history-header"><strong>All EUV doses</strong><button type="button" id="remove-all-comparisons" disabled>Remove all</button></div>
+        <div role="region" id="compare-history" tabindex="0" aria-label="Comparisons across all EUV doses" aria-live="polite"></div>
+        <figure class="comparison-histogram">
+          <figcaption><span>Wavelength histogram · all doses</span><button id="compare-wavelength-gear" class="analysis-calc-gear compare-histogram-gear" type="button" aria-label="Wavelength histogram settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="compare-histogram-settings" title="Wavelength histogram settings">⚙︎</button></figcaption>
+          <div id="compare-histogram"></div>
+        </figure>
+        <figure class="comparison-histogram">
+          <figcaption><span>Gap histogram · all doses</span><button id="compare-gap-gear" class="analysis-calc-gear compare-histogram-gear" type="button" aria-label="Gap histogram settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="compare-histogram-settings" title="Gap histogram settings">⚙︎</button></figcaption>
+          <math class="gap-formula" display="block" aria-label="Gap equals r i times r j times the square root of the ratio of P i squared minus P j squared to r j squared P j squared minus r i squared P i squared">
+            <mi>g</mi><mo>=</mo><msub><mi>r</mi><mi>i</mi></msub><msub><mi>r</mi><mi>j</mi></msub>
+            <msqrt><mfrac>
+              <mrow><msubsup><mi>P</mi><mi>i</mi><mn>2</mn></msubsup><mo>−</mo><msubsup><mi>P</mi><mi>j</mi><mn>2</mn></msubsup></mrow>
+              <mrow><msubsup><mi>r</mi><mi>j</mi><mn>2</mn></msubsup><msubsup><mi>P</mi><mi>j</mi><mn>2</mn></msubsup><mo>−</mo><msubsup><mi>r</mi><mi>i</mi><mn>2</mn></msubsup><msubsup><mi>P</mi><mi>i</mi><mn>2</mn></msubsup></mrow>
+            </mfrac></msqrt>
+          </math>
+          <div id="compare-gap-histogram"></div>
+        </figure>
+      </section>
+      <footer class="rectangle-export">
+        <p id="rectangle-export-status" role="status"></p>
+        <span class="export-frame-note">CSV · full original image coordinates</span>
+        <div class="rectangle-export-controls">
+          <button id="import-rectangles" type="button" title="Import rectangles and any comparisons for one or more images">Import</button>
+          <input id="rectangle-csv-file" type="file" accept=".csv,text/csv" hidden>
+          <button id="export-dose" type="button" title="Export this EUV dose in full original TIFF coordinates (CSV)">Export</button>
+          <button id="export-all" type="button" title="Export rectangles in original TIFF coordinates and all saved comparisons (CSV)">Export all</button>
+        </div>
+      </footer>
+    </div>
+  </aside>
+  <section id="filter-parameters" data-draggable-popup class="filter-parameters" role="dialog" aria-labelledby="filter-parameters-title" hidden>
+    <div class="filter-panel-heading" data-popup-drag-handle><h2 id="filter-parameters-title">Filter parameters</h2><button id="filter-parameters-close" type="button" aria-label="Close filter parameters">×</button></div>
+    <p class="filter-help">Settings apply to all images. Changes update the view and future snaps.</p>
+    <div class="filter-control"><label for="filter-sigma">Shared smoothing · σ <output id="filter-sigma-value"></output></label><input id="filter-sigma" type="range" min="0.4" max="2.5" step="0.05"></div>
+    <p class="filter-help">A shared 5 × 5 smoothing kernel is used for both views; σ = 1 preserves the original binomial kernel.</p>
+    <h3>Canny</h3>
+    <div class="filter-control"><label for="filter-canny-threshold">High threshold multiplier <output id="filter-canny-threshold-value"></output></label><input id="filter-canny-threshold" type="range" min="0.5" max="5" step="0.05"></div>
+    <div class="filter-control"><label for="filter-canny-low">Low / high threshold <output id="filter-canny-low-value"></output></label><input id="filter-canny-low" type="range" min="0.1" max="0.9" step="0.05"></div>
+    <p class="filter-help">Higher thresholds remove weaker edges. The high threshold is relative to each image’s suppressed-gradient distribution.</p>
+    <h3>Edge contrast</h3>
+    <div class="filter-control"><label for="filter-edge-gain">Gain <output id="filter-edge-gain-value"></output></label><input id="filter-edge-gain" type="range" min="0.25" max="4" step="0.05"></div>
+    <div class="filter-control"><label for="filter-edge-gamma">Gamma <output id="filter-edge-gamma-value"></output></label><input id="filter-edge-gamma" type="range" min="0.3" max="2" step="0.05"></div>
+    <h3>Snap and midpoint search</h3>
+    <div class="filter-control"><label for="filter-midpoint-radius">Search on each side <output id="filter-midpoint-radius-value"></output></label><input id="filter-midpoint-radius" type="range" min="1" max="100" step="1"></div>
+    <p class="filter-help">Midpoint guides, midpoint snapping and Canny snapping use this distance in native pixels.</p>
+    <details id="filter-kernels"><summary>View filter kernels (%)</summary><p class="filter-help"><strong>Canny (Sobel)</strong><br>Gₓ = Kₓ ∗ I, &nbsp; Gᵧ = Kᵧ ∗ I<br>|∇I| = √(Gₓ² + Gᵧ²)</p><p class="filter-help"><strong>Edge contrast (Scharr)</strong><br>Gₓ = Kₓ ∗ I, &nbsp; Gᵧ = Kᵧ ∗ I<br>|∇I| = √(Gₓ² + Gᵧ²)</p><p class="filter-help">Coefficients are shown as percentages and rounded for display. Canny also uses non-maximum suppression and thresholding; those steps do not have a fixed convolution kernel.</p><div id="filter-kernel-tables"></div></details>
+    <button id="filter-parameters-reset" type="button" class="filter-reset">Reset defaults</button>
+  </section>
+  <div id="gap-correction-menu" data-draggable-popup class="gap-correction-menu" role="dialog" aria-label="Gap correction" hidden>
+    <div class="gap-menu-heading" data-popup-drag-handle><strong>Gap correction</strong><button type="button" id="gap-close" aria-label="Close gap correction">×</button></div>
+    <label for="gap-number">Δg relative to design gap <span>µm</span></label>
+    <div class="gap-correction-controls"><input id="gap-slider" type="range" min="-100" max="100" step="1" value="0" aria-label="Gap correction slider"><input id="gap-number" type="number" step="any" value="0" aria-label="Gap correction in micrometres"></div>
+    <div class="gap-range-label"><span>−100 µm</span><span>+100 µm</span></div>
+    <p>The nominal gap and wavelength set the initial rectangle positions.</p>
+  </div>
+  <div id="rectangle-menu" data-draggable-popup hidden>
+    <div class="rectangle-menu-heading" data-popup-drag-handle>Rectangle actions</div>
+    <div class="rectangle-menu-mode" role="group" aria-label="Rectangle action mode">
+      <button type="button" data-mode="square" aria-pressed="true">Square</button>
+      <button type="button" data-mode="integral" aria-pressed="false">Integral</button>
+    </div>
+    <div role="menu" tabindex="-1" aria-label="Rectangle actions">
+      <p class="integral-placeholder" hidden>Integral options coming later.</p>
+      <button type="button" role="menuitem" data-command="maximum" aria-pressed="true" hidden>Maximum <span data-maximum-state>✓</span></button>
+      <button type="button" role="menuitem" data-command="inflection" aria-pressed="false" hidden>Inflection Point <span data-inflection-state></span></button>
+      <button type="button" role="menuitem" data-command="canny" aria-keyshortcuts="C">Snap to Canny<kbd aria-hidden="true">C</kbd></button>
+      <button type="button" role="menuitem" data-command="midpoint" aria-keyshortcuts="M">Snap to midpoint<kbd aria-hidden="true">M</kbd></button>
+      <label class="integral-smooth" hidden>Smooth <input type="number" min="0" step="any" value="0" required aria-label="Integral smoothing Gaussian standard deviation in image pixels"> px</label>
+      <label class="integral-signal-range" hidden>Signal range <input type="number" min="0" max="100" step="any" value="75" required aria-label="Integral signal range percentage"> %</label>
+      <button type="button" role="menuitem" data-command="range"><span class="range-label">Snap range</span><span data-range-value>75%</span></button>
+      <button type="button" role="menuitem" data-command="export-integral" hidden>Export CSV</button>
+      <hr>
+      <button type="button" role="menuitem" data-command="duplicate">Duplicate</button>
+      <button type="button" role="menuitem" data-command="remove" aria-keyshortcuts="R Backspace">Remove<kbd aria-hidden="true" title="R or Backspace">R / ⌫</kbd></button>
+    </div>
+    <form hidden>
+      <label for="snap-percent">Snap range</label>
+      <div class="range-entry"><input id="snap-percent" type="number" min="0" max="100" step="any" required><span>%</span><button type="submit">Apply</button></div>
+      <small>Centred on each outline · overlapping spots use their combined span</small>
+    </form>
+    <p role="status"></p>
+  </div>
+  <dialog id="sidecar-dialog" data-draggable-popup class="sidecar-dialog" aria-labelledby="sidecar-title">
+    <div class="sidecar-header" data-popup-drag-handle><h2 id="sidecar-title">Leica sidecar</h2><button id="sidecar-close" type="button" aria-label="Close sidecar">×</button></div>
+    <pre id="sidecar-content" tabindex="0"></pre>
+  </dialog>
+  <div id="compare-histogram-settings" data-draggable-popup class="analysis-calc-settings" role="dialog" aria-labelledby="compare-histogram-settings-title" hidden>
+    <div class="analysis-calc-settings-heading" data-popup-drag-handle><strong id="compare-histogram-settings-title">Histogram settings</strong><button id="compare-histogram-settings-close" type="button" aria-label="Close histogram settings">×</button></div>
+    <div class="analysis-calc-input"><label id="compare-histogram-bin-label" for="compare-histogram-bin">Bin size (nm)</label><input id="compare-histogram-bin" type="number" min="0" step="any" placeholder="Auto"></div>
+    <div class="analysis-calc-limits"><span id="compare-histogram-limits-label">X limits (nm)</span><label><span>Min</span><input id="compare-histogram-xmin" type="number" step="any" placeholder="Auto" aria-label="Histogram x minimum"></label><label><span>Max</span><input id="compare-histogram-xmax" type="number" step="any" placeholder="Auto" aria-label="Histogram x maximum"></label></div>
+    <label class="compare-histogram-filter"><input id="compare-histogram-filter-other" type="checkbox"><span id="compare-histogram-filter-label">Filter gap histogram by these x limits</span></label>
+    <div class="analysis-calc-input"><label for="compare-histogram-ymax">Y max (count)</label><input id="compare-histogram-ymax" type="number" min="0" step="any" placeholder="Auto"></div>
+    <p class="analysis-calc-note">Blank limits are unbounded; the maximum is excluded. X limits crop the display; counts still include the entire bin.</p>
+  </div>
+  <div id="analysis-calc-settings" data-draggable-popup class="analysis-calc-settings" role="dialog" aria-labelledby="analysis-calc-settings-title" hidden>
+    <div class="analysis-calc-settings-heading" data-popup-drag-handle><strong id="analysis-calc-settings-title">Calculation settings</strong><button id="analysis-calc-settings-close" type="button" aria-label="Close calculation settings">×</button></div>
+    <div class="analysis-calc-input"><label id="analysis-calc-step-label" for="analysis-calc-step">Arrow step (µm)</label><input id="analysis-calc-step" type="number" min="0" step="any" value="1" disabled></div>
+    <div class="analysis-calc-input"><label id="analysis-calc-bin-label" for="analysis-calc-bin">Bin size (nm)</label><input id="analysis-calc-bin" type="number" min="0" step="any" placeholder="Auto" value="0.1" disabled></div>
+    <div class="analysis-calc-limits"><span id="analysis-calc-limits-label">X limits (nm)</span><label><span>Min</span><input id="analysis-calc-xmin" type="number" step="any" placeholder="Auto" aria-label="Histogram x minimum" disabled></label><label><span>Max</span><input id="analysis-calc-xmax" type="number" step="any" placeholder="Auto" aria-label="Histogram x maximum" disabled></label></div>
+    <div class="analysis-calc-input"><label for="analysis-calc-ymax">Y max (count)</label><input id="analysis-calc-ymax" type="number" min="0" step="any" placeholder="Auto" disabled></div>
+  </div>
+  <noscript>This local viewer needs JavaScript enabled in your browser.</noscript>
+</body>
+</html>

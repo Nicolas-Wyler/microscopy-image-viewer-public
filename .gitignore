@@ -1,0 +1,19 @@
+# Microscopy images are kept outside this image-free repository.
+images/
+*.tif
+*.tiff
+*.TIF
+*.TIFF
+*.png
+*.jpg
+*.jpeg
+.DS_Store
+
+# Keep experiment data and inherited examples local.
+sidecar-data/
+mask-source/
+project-snapshot.html
+FORK.md
+GUIDE.md
+*.cjob
+*.xlif

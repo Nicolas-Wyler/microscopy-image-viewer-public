@@ -1,0 +1,7 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');const {innerPairs,groups,overlaps}=require('../spot-grouping.js');
+const g=(id,x,y,orientation='vertical')=>({x,y,width:80,height:80,orientation,minusId:id+':minus',plusId:id+':plus'});
+test('inward orders of adjacent gratings are paired along their diffraction axis',()=>{const pairs=innerPairs([g('a',0,0),g('b',200,0),g('c',400,0),g('d',0,200),g('e',200,200)]);assert.deepEqual(pairs,[['a:plus','b:minus'],['b:plus','c:minus'],['d:plus','e:minus']]);});
+test('horizontal diffraction pairs vertically, while nonaligned gratings stay separate',()=>{assert.deepEqual(innerPairs([g('a',0,0,'horizontal'),g('b',0,200,'horizontal'),g('c',200,400,'horizontal')]),[['a:plus','b:minus']]);});
+test('ambiguous neighbors are not guessed and partial selections are never lost',()=>{assert.deepEqual(innerPairs([g('a',0,0),g('b',200,10),g('c',200,-10)]),[]);assert.deepEqual(groups(['a:plus'],[['a:plus','b:minus']],true),[['a:plus']]);assert.deepEqual(groups(['a:plus','b:minus'],[['a:plus','b:minus']],true),[['a:plus','b:minus']]);assert.deepEqual(groups(['a:plus','b:minus'],[['a:plus','b:minus']],false),[['a:plus'],['b:minus']]);});
+
+test('default overlap detection uses the predicted footprint, not just grating adjacency',()=>{const a={x:0,y:0,width:80,height:80};assert.equal(overlaps(a,{x:50,y:0,width:80,height:80}),true);assert.equal(overlaps(a,{x:80,y:0,width:80,height:80}),false);assert.equal(overlaps(a,{x:0,y:81,width:80,height:80}),false);});

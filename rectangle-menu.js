@@ -1,0 +1,189 @@
+'use strict';
+window.createRectangleMenu = function ({ layer, select, render, snap, remove, duplicate, getMode, applyMode, getSignalRange, setSignalRange, exportIntegral, getSmoothing, setSmoothing, getPositionMethod, setPositionMethod }) {
+  const popup = document.getElementById('rectangle-menu'), commands = popup.querySelector('[role=menu]');
+  const form = popup.querySelector('form'), input = form.querySelector('input');
+  const rangeButton = commands.querySelector('[data-command=range]'), status = popup.querySelector('[role=status]');
+  const buttons = [...commands.querySelectorAll('button')];
+  let target = null, mode = 'square';
+  const modeButtons = [...popup.querySelectorAll('[data-mode]')];
+  const squareButtons = buttons.filter(button => ['canny', 'midpoint', 'range'].includes(button.dataset.command));
+  const placeholder = popup.querySelector('.integral-placeholder');
+  const smoothControl = popup.querySelector('.integral-smooth'), smoothInput = smoothControl.querySelector('input');
+  const signalControl = popup.querySelector('.integral-signal-range'), signalInput = signalControl.querySelector('input');
+  function setMode(value, update = true) {
+    mode = value;
+    modeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+    squareButtons.forEach(button => { button.hidden = mode === 'integral'; });
+    signalControl.hidden = mode !== 'integral';
+    if (target) signalInput.value = percent('integral', target.id);
+    rangeButton.querySelector('.range-label').textContent = mode === 'integral' ? 'Signal range' : 'Snap range';
+    rangeButton.querySelector('[data-range-value]').textContent = percent() + '%';
+    form.querySelector('label').textContent = mode === 'integral' ? 'Signal range' : 'Snap range';
+    form.querySelector('small').textContent = mode === 'integral' ? 'The outside regions are used to fit the linear background.' : 'Centred on each outline · overlapping spots use their combined span';
+    placeholder.hidden = true;
+    smoothControl.hidden = mode !== 'integral';
+    if (target) smoothInput.value = getSmoothing(target.id);
+    commands.querySelector('[data-command=export-integral]').hidden = mode !== 'integral';
+    const method=target ? getPositionMethod(target.id) : 'maximum';
+    for (const name of ['maximum','inflection']) {
+      const button=commands.querySelector(`[data-command=${name}]`);
+      button.hidden=mode !== 'integral';
+      button.setAttribute('aria-pressed', String(method===name));
+      button.querySelector(`[data-${name}-state]`).textContent=method===name ? '✓' : '';
+    }
+    status.textContent = '';
+    if (target && update && !popup.hidden) { place(); render(); }
+  }
+  modeButtons.forEach(button => button.addEventListener('click', () => {
+    if (!target) return;
+    applyMode(button.dataset.mode);
+    setMode(button.dataset.mode);
+  }));
+
+  function applySmoothing() {
+    if (!target || !smoothInput.reportValidity()) return;
+    const value=smoothInput.valueAsNumber;
+    if (!Number.isFinite(value) || value < 0) return;
+    if (value !== getSmoothing(target.id)) { setSmoothing(target.id,value); render(); }
+  }
+  smoothInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); applySmoothing(); }
+  });
+  smoothInput.addEventListener('change', applySmoothing);
+
+  function applyDirectSignalRange() {
+    if (!target || !signalInput.reportValidity()) return;
+    const value=signalInput.valueAsNumber;
+    if (!Number.isFinite(value) || value < 0 || value > 100) return;
+    if (value !== getSignalRange(target.id)) setSignalRange(target.id,value);
+    render();
+  }
+  signalInput.addEventListener('input', () => { if (signalInput.validity.valid) render(); });
+  signalInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); applyDirectSignalRange(); }
+  });
+  signalInput.addEventListener('change', applyDirectSignalRange);
+
+  function percent(activeMode = mode, id = target?.id) {
+    const saved = activeMode === 'integral' && id ? getSignalRange(id) : window.OM10Session.get(activeMode === 'integral' ? 'integralDummyPercent' : 'snapRange', 75);
+    return Number.isFinite(saved) && saved >= 0 && saved <= 100 ? saved : 75;
+  }
+  function fraction(activeMode = mode, id = target?.id) {
+    if (activeMode === 'integral' && target && id === target.id && document.activeElement === signalInput && signalInput.validity.valid) return signalInput.valueAsNumber / 100;
+    const editingThis = activeMode === mode && target && (activeMode !== 'integral' || id === target.id) && !form.hidden && input.validity.valid;
+    return (editingThis ? input.valueAsNumber : percent(activeMode, id)) / 100;
+  }
+  function place() {
+    if (window.OM11PopupDrag?.restore(popup)) return;
+    const box = popup.getBoundingClientRect();
+    function offset(pointer, size, limit) {
+      const near = pointer + 4;
+      return Math.max(4, Math.min(limit - size - 4, near + size + 4 <= limit ? near : pointer - size - 4));
+    }
+    popup.style.left = offset(target.x, box.width, innerWidth) + 'px';
+    popup.style.top = offset(target.y, box.height, innerHeight) + 'px';
+  }
+  function close(restoreFocus = false) {
+    if (!target) return;
+    const source = target.source;
+    target = null; popup.hidden = true;
+    if (restoreFocus && source.isConnected) source.focus({ preventScroll: true });
+    render();
+  }
+  function open(shape, x, y, keyboard = false) {
+    close();
+    window.OM11PopupDrag?.reset(popup);
+    const source = shape.querySelector('[data-action=move]');
+    source.focus({ preventScroll: true }); // Finish a pending sidebar edit.
+    select(shape.dataset.outlineId);
+    target = { id: shape.dataset.outlineId, source, x, y };
+    status.textContent = ''; form.hidden = true; commands.hidden = false;
+    setMode(getMode(shape.dataset.outlineId), false);
+    buttons.forEach(button => { button.disabled = false; });
+    rangeButton.querySelector('[data-range-value]').textContent = percent() + '%';
+    popup.hidden = false; place();
+    (keyboard ? buttons.find(button => !button.hidden) : commands).focus({ preventScroll: true }); render();
+  }
+  layer.addEventListener('contextmenu', event => {
+    const shape = event.target.closest('[data-outline-id]');
+    if (!shape) return;
+    event.preventDefault();
+    open(shape, event.clientX, event.clientY);
+  });
+  layer.addEventListener('keydown', event => {
+    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+    const shape = event.target.closest('[data-outline-id]');
+    if (!shape) return;
+    event.preventDefault();
+    const box = shape.querySelector('[data-action=move]').getBoundingClientRect();
+    open(shape, box.left + box.width/2, box.top + box.height/2, true);
+  });
+  commands.addEventListener('click', async event => {
+    const action = event.target.closest('button')?.dataset.command;
+    const current = target;
+    if (!action || !current) return;
+    if (action === 'maximum' || action === 'inflection') { setPositionMethod(current.id, action); setMode(mode); return; }
+    if (action === 'export-integral') {
+      status.textContent = exportIntegral(current.id) || 'CSV downloaded.'; place(); return;
+    }
+    if (action === 'remove') { close(); remove(current.id); return; }
+    if (action === 'duplicate') { close(); duplicate(current.id); return; }
+    if (action === 'range') {
+      commands.hidden = true; form.hidden = false; status.textContent = '';
+      input.value = percent(); place(); input.focus(); input.select(); render(); return;
+    }
+    if (!fraction()) { status.textContent = 'Set a snap range above 0%.'; place(); return; }
+    commands.focus({ preventScroll: true });
+    buttons.forEach(button => { button.disabled = true; });
+    try {
+      const message = await snap(current, action, fraction());
+      if (target !== current) return;
+      if (!message) { close(true); return; }
+      status.textContent = message;
+    } catch (error) {
+      if (target !== current) return;
+      status.textContent = 'Could not read the Canny image.';
+      console.warn('Rectangle snap failed', error);
+    }
+    buttons.forEach(button => { button.disabled = false; });
+    place(); commands.querySelector('[data-command="' + action + '"]').focus({ preventScroll: true });
+  });
+  input.addEventListener('input', render);
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!input.reportValidity()) return;
+    if (mode === 'integral' && target) setSignalRange(target.id, input.valueAsNumber);
+    else window.OM10Session.set('snapRange', input.valueAsNumber);
+    close(true);
+  });
+  popup.addEventListener('keydown', event => {
+    if (event.key === 'Escape' || (event.key === 'Tab' && form.hidden)) {
+      event.preventDefault(); event.stopPropagation(); close(true); return;
+    }
+    if (!form.hidden || event.target === smoothInput || event.target === signalInput || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    event.stopPropagation();
+    const key = event.key.toLowerCase();
+    const visibleButtons = buttons.filter(button => !button.hidden && !button.disabled);
+    const shortcut = visibleButtons.find(button => button.getAttribute('aria-keyshortcuts')?.toLowerCase().split(' ').includes(key));
+    if (shortcut && !event.shiftKey) {
+      event.preventDefault();
+      if (!event.repeat && !shortcut.disabled) shortcut.click();
+      return;
+    }
+    const index = visibleButtons.indexOf(document.activeElement);
+    const next = { ArrowDown: (index+1)%visibleButtons.length, ArrowUp: index <= 0 ? visibleButtons.length-1 : index-1,
+      Home: 0, End: visibleButtons.length-1 }[event.key];
+    if (next !== undefined) { event.preventDefault(); visibleButtons[next].focus(); }
+  });
+  popup.addEventListener('focusout', event => {
+    if (event.relatedTarget && !popup.contains(event.relatedTarget)) close();
+  });
+  document.addEventListener('pointerdown', event => { if (target && !popup.contains(event.target)) close(); }, true);
+  document.addEventListener('scroll', event => { if (target && !popup.contains(event.target)) close(); }, true);
+  window.addEventListener('resize', () => {
+    if (target && !window.OM11PopupDrag?.restore(popup)) close();
+  });
+  window.addEventListener('blur', () => close());
+  function positionStatus(id, message) { if (target?.id === id && mode === 'integral' && form.hidden) status.textContent = message || ''; }
+  return { close, fraction, positionStatus, get mode() { return mode; }, get target() { return target; } };
+};
