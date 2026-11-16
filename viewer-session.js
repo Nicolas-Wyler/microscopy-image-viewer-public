@@ -72,7 +72,7 @@
     window.OM13Storage.removeItem(prefix + key);
     cache.delete(key);
   }
-  window.OM10Session = { get, set, getForSide, setForSide, removeForSide, scope, defaults };
+  window.OM10Session = { get, set, getForSide, setForSide, removeForSide, scope, defaults, storageKey: name => prefix + scopedName(name) };
 
 
   // Restore after the first image has populated both panels. Hidden panels regain

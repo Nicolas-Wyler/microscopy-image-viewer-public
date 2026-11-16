@@ -13,7 +13,7 @@ window.setupViewerState=function({data,beforeSave,alignmentSnapshot}){
       const ids=saved?.project?.images?.map(x=>x.id)||[],displayed=data.importedProject?data.images.map(x=>x.id):[];
       if((saved?.project?.revision||0)!==(data.projectRevision||0)||JSON.stringify(ids)!==JSON.stringify(displayed)||(data.importedProject&&(saved?.project?.mask||'')!==(data.mask||'')))throw new Error('The project changed since this viewer opened. Reopen the viewer and try again.');
       const records=window.OM13Storage.entries(window.OM10Session.scope),alignment=alignmentSnapshot();
-      if(alignment){const key=`om10-viewer:session:v1:${data.exposure}:${data.mask}:stateRestoreAlignment`,index=records.findIndex(row=>row[0]===key),row=[key,JSON.stringify(alignment)];if(index>=0)records[index]=row;else records.push(row);}
+      if(alignment){const key=window.OM10Session.storageKey('stateRestoreAlignment').slice(window.OM10Session.scope.length),index=records.findIndex(row=>row[0]===key),row=[key,JSON.stringify(alignment)];if(index>=0)records[index]=row;else records.push(row);}
       let sidebar=null;try{sidebar=localStorage.getItem('om-project-sidebar-layout-v1');}catch(_){}
       const snapshot=await window.ViewerState.capture(saved,records,{projectSidebarLayout:sidebar},(n,total)=>{status.textContent=`Checking images… ${n} / ${total}`;});
       download(new Blob([JSON.stringify(snapshot)],{type:'application/json'}),name(saved.project.projectTitle)+'_state.json');status.textContent='State saved without image files.';

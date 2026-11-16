@@ -25,7 +25,13 @@
       for(const [a,b] of next){const left=spots.get(a),right=spots.get(b);if(left.displacement!==null&&right.displacement!==null&&window.SpotGrouping.overlaps({x:left.x,y:left.y,width:left.grating.width,height:left.grating.height},{x:right.x,y:right.y,width:right.grating.width,height:right.grating.height}))overlap=true;}
     }
     const together=project.innerTogetherByDesign?.[design.fingerprint]??overlap;
-    return {id:design.id,fingerprint:design.fingerprint,name:design.name||'Mask design',spots,pairs,together,zones:project.zones||[]};
+    return {id:design.id,fingerprint:design.fingerprint,name:design.name||'Mask design',spots,pairs,together,togetherExplicit:project.innerTogetherByDesign?.[design.fingerprint],zones:project.zones||[]};
+  }
+  function refreshGeometry(mask){
+    const windows=new Map();for(const spot of mask.spots.values())if(spot.kind==='zero'){const g=spot.grating;if(!windows.has(g.windowIndex))windows.set(g.windowIndex,[]);windows.get(g.windowIndex).push({x:g.x,y:g.y,width:g.width,height:g.height,orientation:g.orientation,plusId:g.id+':plus',minusId:g.id+':minus'});}
+    mask.pairs=[...windows.values()].flatMap(window.SpotGrouping.innerPairs);let overlap=false;
+    for(const [a,b] of mask.pairs){const left=mask.spots.get(a),right=mask.spots.get(b);if(left&&right&&left.displacement!==null&&right.displacement!==null&&window.SpotGrouping.overlaps({x:left.x,y:left.y,width:left.grating.width,height:left.grating.height},{x:right.x,y:right.y,width:right.grating.width,height:right.grating.height}))overlap=true;}
+    mask.together=mask.togetherExplicit??overlap;
   }
   function forImage(mask,entry){
     if(!mask)return {groups:[],message:'No mask design loaded.'};
@@ -36,5 +42,5 @@
     const groups=[],unknown=[];for(const members of rawGroups){const values=members.map(id=>mask.spots.get(id));if(values.every(Boolean))groups.push({members:[...members],spots:values});else unknown.push(...members.filter(id=>!mask.spots.has(id)));}
     return {groups,missing:unknown,zoneName:zone?.name||'Everything',message:unknown.length?'Some zone spots are not present in this mask design.':''};
   }
-  window.ViewerMask={load,forImage};
+  window.ViewerMask={load,forImage,refreshGeometry};
 })();
