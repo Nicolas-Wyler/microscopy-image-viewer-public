@@ -223,6 +223,8 @@
           <input id="include-images" class="include-images-input" type="text" autocomplete="off" placeholder="All images (e.g. 1, 4, 6-11)" aria-describedby="include-images-error">
           <p id="include-images-error" class="include-images-error" role="status" hidden></p>
           <p id="analysis-image-exclusion" class="analysis-image-exclusion" role="status" hidden></p>
+          <label class="analysis-filter-label" for="analysis-zone">Zone</label>
+          <select id="analysis-zone" class="analysis-filter-select"><option value="__all__">All</option></select>
           <label class="analysis-filter-label" for="analysis-orders">Used diffraction orders</label>
           <select id="analysis-orders" class="analysis-filter-select"><option value="all">All</option><option value="-1">−1</option><option value="1">+1</option></select>
           <label class="analysis-filter-label" for="analysis-side">Grating side</label>
@@ -300,17 +302,12 @@
       <button type="button" role="menuitem" data-command="midpoint" aria-keyshortcuts="M">Snap to midpoint<kbd aria-hidden="true">M</kbd></button>
       <label class="integral-smooth" hidden>Smooth <input type="number" min="0" step="any" value="0" required aria-label="Integral smoothing Gaussian standard deviation in image pixels"> px</label>
       <label class="integral-signal-range" hidden>Signal range <input type="number" min="0" max="100" step="any" value="75" required aria-label="Integral signal range percentage"> %</label>
-      <button type="button" role="menuitem" data-command="range"><span class="range-label">Snap range</span><span data-range-value>75%</span></button>
+      <label class="snap-range">Snap range <input type="number" min="0" max="100" step="any" value="75" required aria-label="Snap range percentage"> %</label>
       <button type="button" role="menuitem" data-command="export-integral" hidden>Export CSV</button>
       <hr>
       <button type="button" role="menuitem" data-command="duplicate">Duplicate</button>
       <button type="button" role="menuitem" data-command="remove" aria-keyshortcuts="R Backspace">Remove<kbd aria-hidden="true" title="R or Backspace">R / ⌫</kbd></button>
     </div>
-    <form hidden>
-      <label for="snap-percent">Snap range</label>
-      <div class="range-entry"><input id="snap-percent" type="number" min="0" max="100" step="any" required><span>%</span><button type="submit">Apply</button></div>
-      <small>Centred on each outline · overlapping spots use their combined span</small>
-    </form>
     <p role="status"></p>
   </div>
   <div id="background-parameters" class="filter-parameters" data-draggable-popup role="dialog" aria-labelledby="background-parameters-title" hidden>

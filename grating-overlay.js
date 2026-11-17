@@ -170,9 +170,7 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
     const matrix = mapping(context), rectScale=context.scale*Math.hypot(matrix[0][0],matrix[1][0]),displayPixel=context.view==='cropped'?(context.entry.alignment?.alignedPixelUm??context.entry.pixelSizeUm):context.entry.pixelSizeUm;
     const unionPairs = window.OM10RectangleUnion.innerPairs(window.OM10_MASK, items);
     const editingId = drag?.outlineId || keyEdit?.id || field?.id || menu.target?.id;
-    const editingPair = unionPairs.get(editingId);
-    const pairBoundary = editingPair && window.OM10RectangleUnion.pairBoundary(
-      ...editingPair.rects, menu.fraction(), editingPair.union);
+    const pairBoundaries = new Map();
     const editing = drag || keyEdit;
     const activelyEdited = editing ? [...editing.before.keys()] : field ? [field.id] : [];
     const invertedIds = new Set(editing?.linkedIds || activelyEdited);
@@ -272,20 +270,20 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
       interiorOutline.toggleAttribute('hidden', integral || !interior?.length);
       if (interior?.length) interiorOutline.setAttribute('d',pathFor(interior));
       const ticks = shape.querySelector('.snap-ticks');
-      const pairIndex=editingPair?.ids.indexOf(id) ?? -1;
-      ticks.toggleAttribute('hidden', id !== editingId && pairIndex<0);
-      if (pairIndex>=0 || id === editingId) {
-        const fraction = menu.fraction(integral ? 'integral' : 'square', id), halfTick = Math.min(4, Math.min(w, h) / 9);
-        const marks = [];
-        if (!integral && pairIndex>=0 && pairBoundary) {
-          for (const tick of pairBoundary.ticks[pairIndex]) marks.push(
-            `M${tick.x*rectScale-tick.nx*halfTick} ${tick.y*rectScale-tick.ny*halfTick}l${2*tick.nx*halfTick} ${2*tick.ny*halfTick}`);
-        } else for (const side of [-1, 1]) for (const end of [-1, 1]) {
-          marks.push(`M${end*fraction*w/2} ${side*h/2-halfTick}v${2*halfTick}`);
-          if (!integral) marks.push(`M${side*w/2-halfTick} ${end*fraction*h/2}h${2*halfTick}`);
-        }
-        for (const path of ticks.children) path.setAttribute('d', marks.join(' '));
+      const pairIndex=pair?.ids.indexOf(id) ?? -1;
+      ticks.removeAttribute('hidden');
+      const fraction = menu.fraction(integral ? 'integral' : 'square', id), halfTick = Math.min(4, Math.min(w, h) / 9);
+      const marks = [];
+      if (!integral && pairIndex >= 0 && pair.rects.every(item => item.shapeMode !== 'integral')) {
+        if (!pairBoundaries.has(pair)) pairBoundaries.set(pair, window.OM10RectangleUnion.pairBoundary(...pair.rects, fraction, pair.union));
+        const boundary = pairBoundaries.get(pair);
+        if (boundary) for (const tick of boundary.ticks[pairIndex]) marks.push(
+          `M${tick.x*rectScale-tick.nx*halfTick} ${tick.y*rectScale-tick.ny*halfTick}l${2*tick.nx*halfTick} ${2*tick.ny*halfTick}`);
+      } else for (const side of [-1, 1]) for (const end of [-1, 1]) {
+        marks.push(`M${end*fraction*w/2} ${side*h/2-halfTick}v${2*halfTick}`);
+        if (!integral) marks.push(`M${side*w/2-halfTick} ${end*fraction*h/2}h${2*halfTick}`);
       }
+      for (const path of ticks.children) path.setAttribute('d', marks.join(' '));
       attrs(shape, { transform: `translate(${x} ${y}) rotate(${degrees(angle)})`, 'data-width-px': rect.width,
         'data-height-px': rect.height, 'data-raw-cx': rect.cx, 'data-raw-cy': rect.cy, 'data-raw-angle': rect.angle });
       shape.classList.toggle('selected-outline', ids.includes(id));

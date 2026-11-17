@@ -1,25 +1,23 @@
 'use strict';
 window.createRectangleMenu = function ({ layer, select, render, snap, remove, duplicate, getMode, applyMode, getSignalRange, setSignalRange, exportIntegral, getSmoothing, setSmoothing, getPositionMethod, setPositionMethod }) {
   const popup = document.getElementById('rectangle-menu'), commands = popup.querySelector('[role=menu]');
-  const form = popup.querySelector('form'), input = form.querySelector('input');
-  const rangeButton = commands.querySelector('[data-command=range]'), status = popup.querySelector('[role=status]');
+  const status = popup.querySelector('[role=status]');
   const buttons = [...commands.querySelectorAll('button')];
   let target = null, mode = 'square';
   const modeButtons = [...popup.querySelectorAll('[data-mode]')];
-  const squareButtons = buttons.filter(button => ['canny', 'midpoint', 'range'].includes(button.dataset.command));
+  const squareButtons = buttons.filter(button => ['canny', 'midpoint'].includes(button.dataset.command));
   const placeholder = popup.querySelector('.integral-placeholder');
   const smoothControl = popup.querySelector('.integral-smooth'), smoothInput = smoothControl.querySelector('input');
   const signalControl = popup.querySelector('.integral-signal-range'), signalInput = signalControl.querySelector('input');
+  const snapControl = popup.querySelector('.snap-range'), snapInput = snapControl.querySelector('input');
   function setMode(value, update = true) {
     mode = value;
     modeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
     squareButtons.forEach(button => { button.hidden = mode === 'integral'; });
     signalControl.hidden = mode !== 'integral';
+    snapControl.hidden = mode !== 'square';
+    snapInput.value = percent('square');
     if (target) signalInput.value = percent('integral', target.id);
-    rangeButton.querySelector('.range-label').textContent = mode === 'integral' ? 'Signal range' : 'Snap range';
-    rangeButton.querySelector('[data-range-value]').textContent = percent() + '%';
-    form.querySelector('label').textContent = mode === 'integral' ? 'Signal range' : 'Snap range';
-    form.querySelector('small').textContent = mode === 'integral' ? 'The outside regions are used to fit the linear background.' : 'Centred on each outline · overlapping spots use their combined span';
     placeholder.hidden = true;
     smoothControl.hidden = mode !== 'integral';
     if (target) smoothInput.value = getSmoothing(target.id);
@@ -64,14 +62,27 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
   });
   signalInput.addEventListener('change', applyDirectSignalRange);
 
+  function applyDirectSnapRange() {
+    if (!target || !snapInput.reportValidity()) return;
+    const value = snapInput.valueAsNumber;
+    if (!Number.isFinite(value) || value < 0 || value > 100) return;
+    window.OM10Session.set('snapRange', value);
+    render();
+  }
+  snapInput.addEventListener('input', () => { if (snapInput.validity.valid) render(); });
+  snapInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); applyDirectSnapRange(); }
+  });
+  snapInput.addEventListener('change', applyDirectSnapRange);
+
   function percent(activeMode = mode, id = target?.id) {
     const saved = activeMode === 'integral' && id ? getSignalRange(id) : window.OM10Session.get(activeMode === 'integral' ? 'integralDummyPercent' : 'snapRange', 75);
     return Number.isFinite(saved) && saved >= 0 && saved <= 100 ? saved : 75;
   }
   function fraction(activeMode = mode, id = target?.id) {
     if (activeMode === 'integral' && target && id === target.id && document.activeElement === signalInput && signalInput.validity.valid) return signalInput.valueAsNumber / 100;
-    const editingThis = activeMode === mode && target && (activeMode !== 'integral' || id === target.id) && !form.hidden && input.validity.valid;
-    return (editingThis ? input.valueAsNumber : percent(activeMode, id)) / 100;
+    if (activeMode === 'square' && target && mode === 'square' && document.activeElement === snapInput && snapInput.validity.valid) return snapInput.valueAsNumber / 100;
+    return percent(activeMode, id) / 100;
   }
   function place() {
     if (window.OM11PopupDrag?.restore(popup)) return;
@@ -86,6 +97,7 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
   function close(restoreFocus = false) {
     if (!target) return;
     const source = target.source;
+    if (document.activeElement === snapInput) applyDirectSnapRange();
     target = null; popup.hidden = true;
     if (restoreFocus && source.isConnected) source.focus({ preventScroll: true });
     render();
@@ -97,10 +109,9 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     source.focus({ preventScroll: true }); // Finish a pending sidebar edit.
     select(shape.dataset.outlineId);
     target = { id: shape.dataset.outlineId, source, x, y };
-    status.textContent = ''; form.hidden = true; commands.hidden = false;
+    status.textContent = ''; commands.hidden = false;
     setMode(getMode(shape.dataset.outlineId), false);
     buttons.forEach(button => { button.disabled = false; });
-    rangeButton.querySelector('[data-range-value]').textContent = percent() + '%';
     popup.hidden = false; place();
     (keyboard ? buttons.find(button => !button.hidden) : commands).focus({ preventScroll: true }); render();
   }
@@ -128,10 +139,6 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     }
     if (action === 'remove') { close(); remove(current.id); return; }
     if (action === 'duplicate') { close(); duplicate(current.id); return; }
-    if (action === 'range') {
-      commands.hidden = true; form.hidden = false; status.textContent = '';
-      input.value = percent(); place(); input.focus(); input.select(); render(); return;
-    }
     if (!fraction()) { status.textContent = 'Set a snap range above 0%.'; place(); return; }
     commands.focus({ preventScroll: true });
     buttons.forEach(button => { button.disabled = true; });
@@ -148,19 +155,11 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     buttons.forEach(button => { button.disabled = false; });
     place(); commands.querySelector('[data-command="' + action + '"]').focus({ preventScroll: true });
   });
-  input.addEventListener('input', render);
-  form.addEventListener('submit', event => {
-    event.preventDefault();
-    if (!input.reportValidity()) return;
-    if (mode === 'integral' && target) setSignalRange(target.id, input.valueAsNumber);
-    else window.OM10Session.set('snapRange', input.valueAsNumber);
-    close(true);
-  });
   popup.addEventListener('keydown', event => {
-    if (event.key === 'Escape' || (event.key === 'Tab' && form.hidden)) {
+    if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation(); close(true); return;
     }
-    if (!form.hidden || event.target === smoothInput || event.target === signalInput || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+    if (event.target === smoothInput || event.target === signalInput || event.target === snapInput || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
     event.stopPropagation();
     const key = event.key.toLowerCase();
     const visibleButtons = buttons.filter(button => !button.hidden && !button.disabled);
@@ -184,6 +183,6 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     if (target && !window.OM11PopupDrag?.restore(popup)) close();
   });
   window.addEventListener('blur', () => close());
-  function positionStatus(id, message) { if (target?.id === id && mode === 'integral' && form.hidden) status.textContent = message || ''; }
+  function positionStatus(id, message) { if (target?.id === id && mode === 'integral') status.textContent = message || ''; }
   return { close, fraction, positionStatus, get mode() { return mode; }, get target() { return target; } };
 };

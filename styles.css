@@ -421,9 +421,9 @@ body.right-collapsed { --right-sidebar-width: 18px; }
 #rectangle-menu .integral-smooth[hidden] { display:none; }
 #rectangle-menu .integral-smooth input { min-width:0; width:55px; margin-left:auto; padding:3px; background:#151b1e; color:var(--text); border:1px solid #586064; border-radius:4px; }
 
-#rectangle-menu .integral-signal-range { display:flex; align-items:center; gap:5px; padding:5px 10px; font-size:12px; }
-#rectangle-menu .integral-signal-range[hidden] { display:none; }
-#rectangle-menu .integral-signal-range input { min-width:0; width:55px; margin-left:auto; padding:3px; background:#151b1e; color:var(--text); border:1px solid #586064; border-radius:4px; }
+#rectangle-menu .integral-signal-range, #rectangle-menu .snap-range { display:flex; align-items:center; gap:5px; padding:5px 10px; font-size:12px; }
+#rectangle-menu .integral-signal-range[hidden], #rectangle-menu .snap-range[hidden] { display:none; }
+#rectangle-menu .integral-signal-range input, #rectangle-menu .snap-range input { min-width:0; width:55px; margin-left:auto; padding:3px; background:#151b1e; color:var(--text); border:1px solid #586064; border-radius:4px; }
 
 .integral-derivative { fill:none; stroke:var(--outline-color, #87eff5); stroke-width:1.2; stroke-dasharray:3 3; opacity:.85; pointer-events:none; }
 .integral-derivative[hidden] { display:none; }

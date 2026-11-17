@@ -401,7 +401,7 @@
   // The analysis reads the same raw centers and diffraction distances as the viewer.
   // Cache each image independently so editing one rectangle does not decode every TIFF again.
   if (byId('wavelength-histogram')) {
-    const panel=byId('analysis-panel'), chart=byId('wavelength-histogram'), message=byId('wavelength-status'), progress=byId('wavelength-progress'), stats=byId('wavelength-statistics'), gapSection=byId('wavelength-gap-section'), gapPlot=byId('wavelength-gap-plot'), gapCaption=byId('wavelength-gap-caption'), includeInput=byId('include-images'), includeError=byId('include-images-error'), imageExclusion=byId('analysis-image-exclusion'), orderInput=byId('analysis-orders'), sideInput=byId('analysis-side'), combinationsNode=byId('analysis-combinations'), binInput=byId('wavelength-bin-width'), binError=byId('wavelength-bin-error'), rangeInput=byId('wavelength-gap-range'), rangeError=byId('wavelength-gap-error'), cache=new Map();
+    const panel=byId('analysis-panel'), chart=byId('wavelength-histogram'), message=byId('wavelength-status'), progress=byId('wavelength-progress'), stats=byId('wavelength-statistics'), gapSection=byId('wavelength-gap-section'), gapPlot=byId('wavelength-gap-plot'), gapCaption=byId('wavelength-gap-caption'), includeInput=byId('include-images'), includeError=byId('include-images-error'), imageExclusion=byId('analysis-image-exclusion'), zoneInput=byId('analysis-zone'), orderInput=byId('analysis-orders'), sideInput=byId('analysis-side'), combinationsNode=byId('analysis-combinations'), binInput=byId('wavelength-bin-width'), binError=byId('wavelength-bin-error'), rangeInput=byId('wavelength-gap-range'), rangeError=byId('wavelength-gap-error'), cache=new Map();
     let revision=0,timer=0,running=false,initialized=false,livePreview=null,liveDirty=false,liveTimer=0,liveVersion=0,lastPlotData=null;
     scheduleWavelengthAnalysis=(delay=120)=>{
       const requested=++revision;clearTimeout(timer);
@@ -409,6 +409,7 @@
     };
     previewWavelengthAnalysis=(context,items,centres)=>{
       if(panel.hidden||!data.importedProject)return;
+      if(zoneInput.value!=='__all__'&&(context.entry.zoneId||'__everything__')!==zoneInput.value)return;
       try{const selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.images.length);if(selected&&!selected.has(context.entry.number))return;}catch(_){return;}
       const points=new Map();for(const [id,item] of centres)if(item.measurementRaw)points.set(id,{measurementRaw:{...item.measurementRaw}});
       livePreview={entryId:context.entry.id,signature:JSON.stringify([...items]),centres:points,version:++liveVersion};
@@ -438,18 +439,24 @@
     });
     const filterKey='analysisFilters:'+String(data.maskDesign?.fingerprint||data.maskDesign?.id||'none');
     const savedFilters=window.OM10Session.get(filterKey,{}),excluded=new Set(Array.isArray(savedFilters.excluded)?savedFilters.excluded:[]);
+    const zones=new Map();for(const entry of data.previewEmpty?[]:data.images)zones.set(entry.zoneId||'__everything__',entry.zoneName||'Everything');
+    for(const [id,label] of zones)zoneInput.add(new Option(label,id));
+    zoneInput.disabled=zones.size<=1;
+    if(zones.size===1)zoneInput.value=zones.keys().next().value;
+    else if(zones.has(savedFilters.zone))zoneInput.value=savedFilters.zone;
+    zoneInput.title=!zones.size?'No images loaded':zoneInput.disabled?'All images have the same zone':'';
     orderInput.value=['all','-1','1'].includes(savedFilters.order)?savedFilters.order:'all';
     sideInput.value=['all','left','right'].includes(savedFilters.side)?savedFilters.side:'all';
     const available=window.ViewerWavelengthHistogram.combinations([...(data.maskDesign?.spots?.values()||[])].map(spot=>spot.grating));
     for(const option of available){const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');input.type='checkbox';input.value=option.key;input.checked=!excluded.has(option.key);text.textContent=option.label;label.append(input,text);combinationsNode.append(label);}
     if(!available.length){const empty=document.createElement('p');empty.className='rectangle-note';empty.textContent='No pitch / electron dose combinations available.';combinationsNode.append(empty);}
-    const filterSettings=()=>({order:orderInput.value,side:sideInput.value,excluded:new Set([...combinationsNode.querySelectorAll('input:not(:checked)')].map(input=>input.value))});
-    function updateFilters(){const next=filterSettings();window.OM10Session.set(filterKey,{order:next.order,side:next.side,excluded:[...next.excluded]});lastPlotData=null;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Updating wavelengths…';scheduleWavelengthAnalysis();}
-    orderInput.addEventListener('change',updateFilters);sideInput.addEventListener('change',updateFilters);combinationsNode.addEventListener('change',updateFilters);
+    const filterSettings=()=>({zone:zoneInput.value,order:orderInput.value,side:sideInput.value,excluded:new Set([...combinationsNode.querySelectorAll('input:not(:checked)')].map(input=>input.value))});
+    function updateFilters(){const next=filterSettings();window.OM10Session.set(filterKey,{zone:zoneInput.disabled?'__all__':next.zone,order:next.order,side:next.side,excluded:[...next.excluded]});lastPlotData=null;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Updating wavelengths…';updateAnalysisImageNotice();scheduleWavelengthAnalysis();}
+    zoneInput.addEventListener('change',updateFilters);orderInput.addEventListener('change',updateFilters);sideInput.addEventListener('change',updateFilters);combinationsNode.addEventListener('change',updateFilters);
     includeInput.value=window.OM10Session.get('analysisIncludedImages','');
     updateAnalysisImageNotice=()=>{
       let selected;try{selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.previewEmpty?0:data.images.length);}catch(_){imageExclusion.hidden=true;return;}
-      const entry=data.images[state.index],excluded=Boolean(selected&&entry&&visibleIndices.includes(state.index)&&!selected.has(entry.number));
+      const entry=data.images[state.index],excluded=Boolean(entry&&visibleIndices.includes(state.index)&&((selected&&!selected.has(entry.number))||(zoneInput.value!=='__all__'&&(entry.zoneId||'__everything__')!==zoneInput.value)));
       imageExclusion.hidden=!excluded;if(excluded)imageExclusion.textContent=`Image ${entry.number} is not included in Analysis.`;
     };
     includeInput.addEventListener('input',()=>{
@@ -467,8 +474,8 @@
       if(!data.importedProject||!data.maskDesign){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Load images and a mask design to calculate wavelengths.';return;}
       const gap=data.nominalGapUm;
       if(!(Number.isFinite(gap)&&gap>0)){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Set the gap in the import menu to calculate wavelengths.';return;}
-      const filtered=selected?data.images.filter(entry=>selected.has(entry.number)):data.images;
-      if(!filtered.length){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='No images loaded.';return;}
+      const filtered=data.images.filter(entry=>(!selected||selected.has(entry.number))&&(zoneInput.value==='__all__'||(entry.zoneId||'__everything__')===zoneInput.value));
+      if(!filtered.length){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent=data.images.length?'No images match the analysis filters.':'No images loaded.';return;}
       message.textContent='Calculating wavelengths…';progress.max=filtered.length;progress.value=0;progress.hidden=panel.hidden;const options=settings(),analysisFilters=filterSettings(),side=state.pictureSide,values=[],measurements=[];let unavailable=0,hasPairs=false;
       for(const [index,entry] of filtered.entries()){
         progress.value=index;message.textContent=`Calculating wavelengths… ${index+1} / ${filtered.length} images`;
