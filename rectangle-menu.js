@@ -3,7 +3,14 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
   const popup = document.getElementById('rectangle-menu'), commands = popup.querySelector('[role=menu]');
   const status = popup.querySelector('[role=status]');
   const buttons = [...commands.querySelectorAll('button')];
-  let target = null, mode = 'square';
+  const stored=window.OM10Session.get('rectangleCreationSettings',{});
+  let target = null, mode = stored.shapeMode==='integral'?'integral':'square';
+  let lastSettings={shapeMode:mode,positionMethod:stored.positionMethod==='inflection'?'inflection':'maximum',smoothingSigma:Number.isFinite(stored.smoothingSigma)&&stored.smoothingSigma>=0?stored.smoothingSigma:0,signalRange:Number.isFinite(stored.signalRange)&&stored.signalRange>=0&&stored.signalRange<=100?stored.signalRange:window.OM10Session.get('integralDummyPercent',75)};
+  function remember(){
+    if(!target)return;
+    lastSettings={shapeMode:mode,positionMethod:getPositionMethod(target.id),smoothingSigma:getSmoothing(target.id),signalRange:getSignalRange(target.id)};
+    window.OM10Session.set('rectangleCreationSettings',lastSettings);
+  }
   const modeButtons = [...popup.querySelectorAll('[data-mode]')];
   const squareButtons = buttons.filter(button => ['canny', 'midpoint'].includes(button.dataset.command));
   const placeholder = popup.querySelector('.integral-placeholder');
@@ -35,7 +42,7 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
   modeButtons.forEach(button => button.addEventListener('click', () => {
     if (!target) return;
     applyMode(button.dataset.mode);
-    setMode(button.dataset.mode);
+    setMode(button.dataset.mode); remember();
   }));
 
   function applySmoothing() {
@@ -43,6 +50,7 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     const value=smoothInput.valueAsNumber;
     if (!Number.isFinite(value) || value < 0) return;
     if (value !== getSmoothing(target.id)) { setSmoothing(target.id,value); render(); }
+    remember();
   }
   smoothInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); applySmoothing(); }
@@ -54,7 +62,7 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     const value=signalInput.valueAsNumber;
     if (!Number.isFinite(value) || value < 0 || value > 100) return;
     if (value !== getSignalRange(target.id)) setSignalRange(target.id,value);
-    render();
+    remember(); render();
   }
   signalInput.addEventListener('input', () => { if (signalInput.validity.valid) render(); });
   signalInput.addEventListener('keydown', event => {
@@ -97,8 +105,10 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
   function close(restoreFocus = false) {
     if (!target) return;
     const source = target.source;
+    if (document.activeElement === smoothInput) applySmoothing();
+    if (document.activeElement === signalInput) applyDirectSignalRange();
     if (document.activeElement === snapInput) applyDirectSnapRange();
-    target = null; popup.hidden = true;
+    remember(); target = null; popup.hidden = true;
     if (restoreFocus && source.isConnected) source.focus({ preventScroll: true });
     render();
   }
@@ -110,7 +120,7 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     select(shape.dataset.outlineId);
     target = { id: shape.dataset.outlineId, source, x, y };
     status.textContent = ''; commands.hidden = false;
-    setMode(getMode(shape.dataset.outlineId), false);
+    setMode(getMode(shape.dataset.outlineId), false); remember();
     buttons.forEach(button => { button.disabled = false; });
     popup.hidden = false; place();
     (keyboard ? buttons.find(button => !button.hidden) : commands).focus({ preventScroll: true }); render();
@@ -133,7 +143,7 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
     const action = event.target.closest('button')?.dataset.command;
     const current = target;
     if (!action || !current) return;
-    if (action === 'maximum' || action === 'inflection') { setPositionMethod(current.id, action); setMode(mode); return; }
+    if (action === 'maximum' || action === 'inflection') { setPositionMethod(current.id, action); setMode(mode); remember(); return; }
     if (action === 'export-integral') {
       status.textContent = exportIntegral(current.id) || 'CSV downloaded.'; place(); return;
     }
@@ -184,5 +194,5 @@ window.createRectangleMenu = function ({ layer, select, render, snap, remove, du
   });
   window.addEventListener('blur', () => close());
   function positionStatus(id, message) { if (target?.id === id && mode === 'integral') status.textContent = message || ''; }
-  return { close, fraction, positionStatus, get mode() { return mode; }, get target() { return target; } };
+  return { close, fraction, positionStatus, defaults:()=>({...lastSettings}), get mode() { return mode; }, get target() { return target; } };
 };

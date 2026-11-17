@@ -37,19 +37,20 @@
     const count=safeNumber(big ? countView.getBigUint64(0,le) : countView.getUint16(0,le));
     if (!count || count > 65536) throw new Error('Invalid TIFF image directory');
     const entries=await bytes(file,offset+countBytes,count*entryBytes);
-    let width, height;
+    let width, height, orientation=1;
     for(let i=0;i<count;i++) {
       const p=i*entryBytes, tag=entries.getUint16(p,le);
-      if(tag!==256 && tag!==257) continue;
+      if(tag!==256 && tag!==257 && tag!==274) continue;
       const type=entries.getUint16(p+2,le);
       const n=safeNumber(big ? entries.getBigUint64(p+4,le) : entries.getUint32(p+4,le));
       const size=type===3?2:type===4?4:big && type===16?8:0;
       if(n!==1 || !size || size>inlineBytes) throw new Error('Invalid TIFF image dimensions');
       const v = size===2 ? entries.getUint16(p+valueOffset,le) : size===4 ? entries.getUint32(p+valueOffset,le) : safeNumber(entries.getBigUint64(p+valueOffset,le));
-      if(tag===256) width=v; else height=v;
+      if(tag===256) width=v; else if(tag===257) height=v; else orientation=v;
     }
     if(!width || !height) throw new Error('Missing TIFF image dimensions');
-    return {width,height};
+    if(!Number.isInteger(orientation)||orientation<1||orientation>8) throw new Error('Invalid TIFF orientation');
+    return orientation>=5 ? {width:height,height:width} : {width,height};
   }
   async function validateFolder({files, directories, directoryVisibility = true, selectionKind = 'folder'}, onProgress = () => {}, shouldCancel = () => false) {
     const clean = p => p.replace(/\\/g,'/').replace(/^\/+|\/+$/g,'');

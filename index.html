@@ -8,20 +8,21 @@
   <title>Microscopy image viewer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23d8eb87'/%3E%3Cpath d='M11 11h7v7h-7zm11 0h7v7h-7zm-11 11h7v7h-7zm11 0h7v7h-7z' fill='%23171b1d'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="folder-loader.css">
-  <script defer src="folder-validator.js"></script>
+  <script defer src="folder-validator.js?v=orientation-1"></script>
   <script defer src="table-project-store.js"></script>
   <script defer src="sidecar-magnification.js"></script>
   <script defer src="vendor/pako-inflate.min.js"></script>
   <script defer src="vendor/utif.js"></script>
-  <script defer src="tiff-image.js"></script>
+  <script defer src="pixel-worker-source.js?v=1"></script>
+  <script defer src="tiff-image.js?v=pixel-worker-1"></script>
   <script defer src="image-table-state.js"></script>
   <script defer src="image-table.js"></script>
-  <script defer src="cjob-model.js"></script>
+  <script defer src="cjob-model.js?v=wafer-mirror-1"></script>
   <script defer src="spot-grouping.js"></script>
-  <script defer src="cjob-view.js"></script>
-  <script defer src="mask-design-editor.js"></script>
+  <script defer src="cjob-view.js?v=mirror-option-1"></script>
+  <script defer src="mask-design-editor.js?v=mirror-preview-1"></script>
   <script defer src="project-sidebar.js"></script>
-  <script defer src="folder-loader.js"></script>
+  <script defer src="folder-loader.js?v=mirror-option-1"></script>
   <link rel="stylesheet" href="styles.css?v=om13-inner-pair-2">
   <script defer src="data.js?v=1.0.6-om13"></script>
   <script defer src="project-storage.js?v=om13-1"></script>
@@ -85,7 +86,8 @@
       <label for="project-description">Description</label>
       <textarea id="project-description" rows="4" placeholder="Notes about this project"></textarea>
       <label for="project-dose">Dose (mJ/cm²)</label>
-      <div class="dose-entry"><input id="project-dose" type="number" min="0" step="any" placeholder="None" autocomplete="off" disabled><div class="background-actions"><button type="button" id="dose-apply" aria-label="Apply dose to selected images" title="Apply to selected images" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button></div></div>
+      <div class="dose-entry"><input id="project-dose" type="number" min="0" step="any" placeholder="None" autocomplete="off" disabled><span class="dose-multiplier-sign" aria-hidden="true">×</span><input id="dose-series-multiplier" class="dose-multiplier" type="number" min="0" step="any" value="1.0" aria-label="Dose multiplier per image" title="Multiplier between selected images; 1.0 applies the same dose" autocomplete="off" disabled><div class="background-actions"><button type="button" id="dose-apply" aria-label="Apply dose to selected images" title="Apply dose in table order" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button></div></div>
+      <p id="dose-series-error" class="background-status" role="status"></p>
       <section class="cjob-panel" aria-label="Mask Design">
         <label>Mask Design</label>
         <p id="cjob-filename" class="cjob-filename">No CJOB loaded</p>
@@ -137,8 +139,9 @@
         <dialog id="mask-editor" class="mask-editor" aria-labelledby="mask-editor-title">
           <header class="cjob-header"><div><h2 id="mask-editor-title">Edit mask design</h2><p id="mask-editor-subtitle"></p></div><button id="mask-editor-close" type="button" aria-label="Close mask design editor">×</button></header>
           <div class="mask-editor-content">
-            <div class="mask-editor-top"><label for="mask-design-name">Design name</label><input id="mask-design-name" type="text" maxlength="100" autocomplete="off"><button id="mask-remove-cjob" type="button" hidden>Remove CJOB</button></div>
+            <div class="mask-editor-top"><label for="mask-design-name">Design name</label><input id="mask-design-name" type="text" maxlength="100" autocomplete="off"><button id="mask-rotate" type="button">Rotate 180°</button><span id="mask-rotation-status" aria-live="polite"></span><button id="mask-remove-cjob" type="button" hidden>Remove CJOB</button></div>
             <p id="mask-editor-notice" class="mask-editor-notice"></p><label class="mask-sadp"><input id="mask-sadp" type="checkbox"> SADP (finished pitch is half the designed pitch)</label>
+            <label class="mask-sadp"><input id="mask-mirror-y" type="checkbox"> Mirror predicted pattern across y-axis</label>
             <div class="mask-editor-table-wrap"><table class="mask-editor-table"><thead><tr><th>Pitch (nm)</th><th>x pos (µm)</th><th>y pos (µm)</th><th>Width (µm)</th><th>Height (µm)</th><th>Electron dose (µC/cm²)</th><th><span class="visually-hidden">Delete</span></th></tr></thead><tbody id="mask-editor-body"></tbody></table></div>
             <button id="mask-add-row" type="button">＋ Add grating</button>
             <p id="mask-editor-error" class="mask-editor-error" role="status"></p>

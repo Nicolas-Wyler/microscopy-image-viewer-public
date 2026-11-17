@@ -29,6 +29,25 @@
     return pairs.filter(p=>Number.isFinite(p.distanceUm)&&p.distanceUm>=0&&Number.isFinite(p.pitch)&&p.pitch>0)
       .map(p=>p.pitch*p.distanceUm/Math.hypot(gapUm,p.distanceUm));
   }
+  // Eliminate the common gap from two 0–1 distances and their mask pitches.
+  function comparisonWavelength(a,b){
+    if(!a||!b||![a.pitch,b.pitch,a.distanceUm,b.distanceUm].every(Number.isFinite))return null;
+    const [small,large]=a.pitch<b.pitch?[a,b]:[b,a],p=small.pitch,q=large.pitch;
+    if(!(p>0&&p<q&&small.distanceUm>large.distanceUm&&large.distanceUm>0))return null;
+    const ratio=large.distanceUm/small.distanceUm,term=((p-ratio*q)*(p+ratio*q))/((1-ratio)*(1+ratio));
+    if(!(term>0))return null;const value=Math.sqrt(term);
+    return Number.isFinite(value)&&value<p?value:null;
+  }
+  function comparisonValues(first,second){
+    const values=[],byImage=new Map();let rejected=0,attempted=0;
+    for(const item of second){if(!byImage.has(item.imageId))byImage.set(item.imageId,[]);byImage.get(item.imageId).push(item);}
+    for(const a of first)for(const b of byImage.get(a.imageId)||[]){
+      if(a.pitch===b.pitch)continue;
+      attempted++;const value=comparisonWavelength(a,b);
+      if(value===null)rejected++;else values.push(value);
+    }
+    return {values,rejected,attempted};
+  }
   function bins(values,requestedWidth=null){
     if(requestedWidth!==null&&(!(Number.isFinite(requestedWidth))||requestedWidth<=0))throw new Error('Bin width must be a positive number.');
     values=values.filter(Number.isFinite);if(!values.length)return null;
@@ -99,5 +118,5 @@
     if(usable.every(p=>Number.isFinite(p.sd))){const upper=usable.map(p=>`${X(p.offset)},${Y(p.mean+p.sd)}`),lower=[...usable].reverse().map(p=>`${X(p.offset)},${Y(p.mean-p.sd)}`);add('polygon',{points:[...upper,...lower].join(' '),class:'gap-band'});}
     add('polyline',{points:usable.map(p=>`${X(p.offset)},${Y(p.mean)}`).join(' '),class:'gap-mean'});container.append(svg);
   }
-  return {parseImages,combinationKey,combinations,matchesFilters,wavelengths,bins,statistics,niceAxis,draw,gapSensitivity,drawGap};
+  return {parseImages,combinationKey,combinations,matchesFilters,wavelengths,comparisonWavelength,comparisonValues,bins,statistics,niceAxis,draw,gapSensitivity,drawGap};
 });

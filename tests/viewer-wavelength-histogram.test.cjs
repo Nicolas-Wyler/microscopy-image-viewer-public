@@ -56,3 +56,12 @@ test('gap sensitivity uses the specified symmetric range',()=>{
  const {gapSensitivity}=require('../viewer-wavelength-histogram.js');const p=gapSensitivity([{distanceUm:100,pitch:24}],2300,125);
  assert.equal(p.length,101);assert.equal(p[0].offset,-125);assert.equal(p[50].offset,0);assert.equal(p[100].offset,125);assert.throws(()=>gapSensitivity([{distanceUm:100,pitch:24}],2300,0));
 });
+
+test('two-pitch comparison eliminates the gap and rejects nonphysical ratios',()=>{
+ const {comparisonWavelength,comparisonValues}=require('../viewer-wavelength-histogram.js');const lambda=13,gap=300,r=p=>gap*lambda/Math.sqrt(p*p-lambda*lambda);
+ const a={pitch:32,distanceUm:r(32),imageId:'a'},b={pitch:44,distanceUm:r(44),imageId:'a'},other={...b,imageId:'b'};
+ assert.ok(Math.abs(comparisonWavelength(a,b)-lambda)<1e-10);assert.ok(Math.abs(comparisonWavelength(b,a)-lambda)<1e-10);
+ assert.equal(comparisonWavelength(a,{...b,distanceUm:r(32)}),null);assert.equal(comparisonWavelength(a,{...b,pitch:32}),null);assert.equal(comparisonWavelength(a,{...b,distanceUm:0}),null);
+ const same=comparisonValues([a],[b,other]);assert.equal(same.values.length,1);assert.equal(same.attempted,1);
+ const bad=comparisonValues([a],[{...b,distanceUm:r(32)}]);assert.equal(bad.rejected,1);assert.equal(bad.values.length,0);
+});

@@ -9,6 +9,8 @@
     const nm=unit==='nm'?value:unit==='mm'?value*1e6:value*1000;
     return kind==='wavelength'?nm:nm/1000;
   }
+  // Mirror only the predicted wafer pattern, leaving the mask design unchanged.
+  function predictedGrating(grating){return {...grating,x:-grating.x};}
   function displacement(wavelengthNm,gapUm,pitchNm){
     if(!Number.isFinite(wavelengthNm)||!Number.isFinite(gapUm)||!Number.isFinite(pitchNm)||wavelengthNm<=0||gapUm<=0||pitchNm<=0||wavelengthNm>=pitchNm)return null;
     return gapUm*Math.tan(Math.asin(wavelengthNm/pitchNm));
@@ -109,5 +111,5 @@
     if(!windows.length)throw new Error('No pattern instances were found in this exposure.');
     return {windows,warnings:[...warnings],sadpDocumented:sadp};
   }
-  return {quantity,displacement,expandPlacements,parse};
+  return {quantity,displacement,predictedGrating,expandPlacements,parse};
 });

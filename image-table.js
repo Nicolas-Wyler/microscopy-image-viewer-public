@@ -181,6 +181,12 @@
     if(!list.items().some(item=>ids.includes(item.id) && (item.exposureDose ?? '')!==value))return;
     mutateProject(state=>{for(const id of ids)state.setDose(id,value);});
   }
+  function assignDoseSeries(ids,start,multiplier) {
+    if(!list || !ids.length)return;
+    const series=window.ImageTableState.doseSeries(list.items(),ids,start,multiplier);
+    if(!series.some(([id,value])=>list.items().some(item=>item.id===id&&(item.exposureDose??'')!==value)))return;
+    mutateProject(state=>{for(const [id,value] of series)state.setDose(id,value);});
+  }
   function assignBackground(ids,backgroundId) {
     if(!list || !ids.length)return;
     const changed=list.items().some(item=>ids.includes(item.id) && (item.backgroundId || '')!==backgroundId);
@@ -225,5 +231,5 @@
   fit.addEventListener('click',()=>setZoom('fit'));native.addEventListener('click',()=>setZoom('native'));closeButton.addEventListener('click',closeInspector);
   dialog.addEventListener('click',event=>{if(event.target===dialog)closeInspector();});
   dialog.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeInspector();}});
-  window.ImageTable={start,reset,add,mutateProject,assignDose,assignBackground,assignZone,refresh:()=>{if(list)render();},getSelectedIds:()=>[...selected],inspectBackground:(background,button)=>inspect(background,button,()=>getBackgrounds().some(item=>item.id===background.id))};
+  window.ImageTable={start,reset,add,mutateProject,assignDose,assignDoseSeries,assignBackground,assignZone,refresh:()=>{if(list)render();},getSelectedIds:()=>[...selected],inspectBackground:(background,button)=>inspect(background,button,()=>getBackgrounds().some(item=>item.id===background.id))};
 })();

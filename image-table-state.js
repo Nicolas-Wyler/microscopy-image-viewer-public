@@ -5,6 +5,15 @@
   else root.ImageTableState=api;
 })(globalThis, function () {
   'use strict';
+  function doseSeries(items,ids,start,multiplier){
+    if(!(Number.isFinite(start)&&start>=0&&Number.isFinite(multiplier)&&multiplier>=0))throw new Error('Enter a non-negative starting dose and multiplier.');
+    const selected=new Set(ids),out=[];let value=start;
+    for(const item of items){if(!selected.has(item.id))continue;
+      if(!Number.isFinite(value))throw new Error('The dose series exceeds the supported numeric range.');
+      out.push([item.id,String(Number(value.toPrecision(12)))]);value*=multiplier;
+    }
+    return out;
+  }
   function createImageList(entries, options={}) {
     const list=[...entries];
     if(!options.preserveOrder)list.sort((a,b)=>a.file.name.localeCompare(b.file.name, undefined, {numeric:true,sensitivity:'base'}));
@@ -43,5 +52,5 @@
       remove(id) {const n=list.findIndex(x=>x.id===id); return n<0?null:list.splice(n,1)[0];}
     };
   }
-  return {createImageList};
+  return {createImageList,doseSeries};
 });

@@ -17,6 +17,7 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
     const storageError = window.OM13Storage.error;
     saveStatus.textContent = storageError ? 'Save failed: export your work before closing this page.' : window.OM13Storage.pending ? 'Saving…' : drag ? 'Editing…' : lastSaveState.text;
     saveStatus.classList.toggle('save-error', Boolean(storageError || lastSaveState.error));
+    saveStatus.hidden = !(storageError || lastSaveState.error);
     saveStatus.title = storageError ? String(storageError) : lastSaveState.error || 'Rectangles are saved in this browser for this app address.';
   }
   window.addEventListener('om13-storage-status', updateSaveStatus);
@@ -406,7 +407,7 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
     if (!context.ready) return;
     finish();
     if (rectangles(context).has(spot.id)) { remove([spot.id]); return; }
-    rectangles(context).set(spot.id, { ...initialSpot(context,spot), shapeMode: menu.mode });
+    rectangles(context).set(spot.id, { ...initialSpot(context,spot), ...menu.defaults() });
     selected.set(key(context), [spot.id]); save(context); recordEdit(context, spot.id, undefined); render();
   }
   function duplicateSpot(spot,source) {
@@ -567,7 +568,7 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
     const copies = new Map(rectanglesForExport(source));
     if (!copies.size) return source.filename + ' has no rectangles to copy.';
     const original = rectanglesForExport(context.entry), before = new Map(original);
-    const fraction = menu.fraction();
+    const fraction = menu.fraction('square');
     const wanted = resnap ? [...copies.values()].filter(rect => rect.snapMode).length : 0;
     let mask, fitted = 0;
     if (wanted && fraction > 0) {
@@ -579,7 +580,8 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
         return 'Copy cancelled because the destination rectangles changed.';
       }
     }
-    const items = new Map(before), changed = new Set(), handled = new Set();
+    // Shift+Space replaces the destination as one atomic, undoable edit.
+    const items = resnap ? new Map() : new Map(before), changed = new Set(resnap ? before.keys() : []), handled = new Set();
     for (const [id, rect] of copies) {
       items.set(id,G.copyToDose(rect, source, context.entry)); changed.add(id);
     }
@@ -651,6 +653,7 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
       return filenames;
     } catch (error) {
       saveStatus.textContent = (forward ? 'Redo' : 'Undo') + ' failed: ' + error.message;
+      saveStatus.hidden = false; saveStatus.classList.add('save-error');
       return [];
     }
   }

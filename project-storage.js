@@ -7,7 +7,7 @@
     failed = error || new Error('IndexedDB write failed');
     console.error('Project storage error:', failed);
     const node = document.getElementById('rectangle-save-status');
-    if (node) { node.textContent = 'Save failed: export your work before closing this page.'; node.classList.add('save-error'); node.title = String(failed); }
+    if (node) { node.hidden = false; node.textContent = 'Save failed: export your work before closing this page.'; node.classList.add('save-error'); node.title = String(failed); }
     window.dispatchEvent(new Event('om13-storage-status'));
   }
   const ready = new Promise((resolve, reject) => {

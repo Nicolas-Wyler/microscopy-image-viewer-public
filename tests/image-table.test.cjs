@@ -23,3 +23,10 @@ test('moves multiple selected images as one ordered group and supports restoring
  assert.deepEqual(list.items().map(x=>x.id),['b','d','a','c']);
  list.restore(saved);assert.deepEqual(list.items().map(x=>x.id),['a','b','c','d']);assert.equal(list.items()[0].name,'a');
 });
+test('dose series follows table order for selected images and rejects invalid results',()=>{
+ const {doseSeries}=require('../image-table-state.js');
+ assert.deepEqual(doseSeries([{id:'d'},{id:'c'},{id:'b'},{id:'a'}],['a','d','b'],10,1.58),[['d','10'],['b','15.8'],['a','24.964']]);
+ assert.deepEqual(doseSeries([{id:'a'},{id:'b'},{id:'c'}],['a','b','c'],100,0.5),[['a','100'],['b','50'],['c','25']]);
+ assert.throws(()=>doseSeries([{id:'a'},{id:'b'}],['a','b'],10,-1));
+ assert.throws(()=>doseSeries([{id:'a'},{id:'b'}],['a','b'],1e308,2));
+});

@@ -3,11 +3,23 @@
 window.ViewerAlignment={
   async cache(data,write){
     try{
-      const signature=JSON.stringify({version:4,images:data.images.map(e=>[e.id,e.width,e.height,e.pixelSizeUm,e.hasCalibration,e.zoneId]),spots:[...data.maskDesign.spots.values()].map(p=>[p.id,p.kind,p.x,p.y,p.displacement,p.grating.width,p.grating.height,p.grating.windowIndex]),zones:data.maskDesign.zones.map(z=>[z.id,z.cjobId,z.spotIds,z.spotGroups])});
+      const signature=JSON.stringify({version:6,images:data.images.map(e=>[e.id,e.width,e.height,e.pixelSizeUm,e.hasCalibration,e.zoneId]),spots:[...data.maskDesign.spots.values()].map(p=>[p.id,p.kind,p.x,p.y,p.displacement,p.grating.width,p.grating.height,p.grating.windowIndex]),zones:data.maskDesign.zones.map(z=>[z.id,z.cjobId,z.spotIds,z.spotGroups])});
       const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(signature)),key=[...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('');
       const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('MicroscopyViewerAlignment',1);q.onupgradeneeded=()=>q.result.createObjectStore('alignments');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
       const value=await new Promise((resolve,reject)=>{const tx=db.transaction('alignments',write?'readwrite':'readonly'),store=tx.objectStore('alignments'),req=write?store.put(write,key):store.get(key);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});db.close();return value;
     }catch(_){return null;}
+  },
+  complete(data,rotation,referenceScale,recalibrated=false,rotationKnown=true,frame=null){
+    const scales=data.images.filter(e=>e.hasCalibration&&Number.isFinite(e.pixelSizeUm)&&e.pixelSizeUm>0).map(e=>e.pixelSizeUm).sort((a,b)=>a-b);
+    const ref=referenceScale>0?referenceScale:(scales.length?scales[Math.floor(scales.length/2)]:1);let centered=0;
+    for(const entry of data.images){
+      const existing=entry.alignment;
+      if(existing && (!frame || existing.translationSource!=='centered' || (entry.cropWidth===frame.cropWidth && entry.cropHeight===frame.cropHeight)))continue;
+      const plan=window.ViewerRecalibration.centered({id:entry.id,width:entry.width,height:entry.height,pixelSizeUm:entry.hasCalibration?entry.pixelSizeUm:null},rotation,ref,frame);
+      for(const frame of [entry.top,entry.bottom]){frame.rawToCrop=plan.matrix;frame.cropWidth=plan.cropWidth;frame.cropHeight=plan.cropHeight;frame.alignment={...(frame.alignment||{}),angle:-rotation,originCropY:plan.originCropY,alignedPixelUm:plan.alignedPixelUm,recalibrated,rotationKnown,translationSource:'centered'};}
+      centered++;
+    }
+    return centered;
   },
   async run(data,onProgress){
     const results=[], images=data.images, report=(n)=>onProgress?.(n,images.length);
@@ -27,7 +39,7 @@ window.ViewerAlignment={
       }catch(error){entry.alignmentError=error.message||'Alignment failed';}
       report(i+1);await new Promise(resolve=>setTimeout(resolve,0));
     }
-    if(!results.length)return {aligned:0,total:images.length};
+    if(!results.length){const centered=this.complete(data,0,null,false,false);return {aligned:0,total:images.length,centered,angle:null};}
     const median=a=>{a=[...a].sort((x,y)=>x-y);return a[Math.floor(a.length/2)];};
     const angles=results.map(r=>r.fit.angle),anchor=angles.reduce((best,a)=>angles.reduce((sum,b)=>sum+Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b))),0)<best.score?{angle:a,score:angles.reduce((sum,b)=>sum+Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b))),0)}:best,{angle:angles[0],score:Infinity}).angle;
     const common=anchor+median(angles.map(a=>Math.atan2(Math.sin(a-anchor),Math.cos(a-anchor)))),referenceScale=median(results.map(r=>r.entry.pixelSizeUm)),c=Math.cos(common),s=Math.sin(common);let aligned=0;
@@ -41,18 +53,19 @@ window.ViewerAlignment={
     }
     const bottom=Math.min(...footprints.map(p=>p.y-p.height/2)),top=Math.max(...footprints.map(p=>p.y+p.height/2));
     const margin=Math.max(...footprints.map(p=>p.height))/2,physicalHeight=top-bottom+2*margin,physicalCentre=(top+bottom)/2;
+    const validSpots=[...data.maskDesign.spots.values()].filter(p=>p.kind==='zero'||p.displacement!==null),maxX=Math.max(0,...validSpots.map(p=>(Math.abs(p.x)+(p.grating.width||0)/2)/referenceScale));
+    const cropWidth=Math.ceil(Math.max(...results.map(r=>r.entry.width*r.entry.pixelSizeUm/referenceScale),maxX*2+100)),maxHeight=Math.max(...results.map(r=>r.entry.height*r.entry.pixelSizeUm/referenceScale));
+    const cropHeight=Math.min(Math.ceil(maxHeight),Math.max(1,Math.ceil(physicalHeight/referenceScale))),originCropY=cropHeight/2+physicalCentre/referenceScale;
     for(const {entry,fit,factor} of results){
       if(Math.abs(Math.atan2(Math.sin(fit.angle-common),Math.cos(fit.angle-common)))>Math.PI/45){entry.alignmentError='Spot rotation differs from the common rotation';continue;}
-      if(Math.abs(entry.pixelSizeUm/referenceScale-1)>.005){entry.alignmentError='Pixel scale differs from the other aligned images';continue;}
       const tx=median(fit.matches.map(m=>m.candidate.x-c*m.model.x+s*m.model.y))*factor,ty=median(fit.matches.map(m=>m.candidate.y-s*m.model.x-c*m.model.y))*factor;
-      const validSpots=[...data.maskDesign.spots.values()].filter(p=>p.kind==='zero'||p.displacement!==null),maxX=Math.max(0,...validSpots.map(p=>(Math.abs(p.x)+(p.grating.width||0)/2)/entry.pixelSizeUm));
-      const cropWidth=Math.max(entry.width,Math.ceil(maxX*2+100)),cropHeight=Math.min(entry.height,Math.max(1,Math.ceil(physicalHeight/entry.pixelSizeUm)));
-      const originCropY=cropHeight/2+physicalCentre/entry.pixelSizeUm;
-      const matrix=[[c,s,cropWidth/2-c*tx-s*ty],[-s,c,originCropY+s*tx-c*ty],[0,0,1]];
-      for(const frame of [entry.top,entry.bottom]){frame.rawToCrop=matrix;frame.cropWidth=cropWidth;frame.cropHeight=cropHeight;frame.alignment={angle:common,originCropY,individualAngle:fit.angle,matches:fit.matches.map(m=>({id:m.model.id,x:m.candidate.x*factor,y:m.candidate.y*factor})),pixelSizeUm:entry.pixelSizeUm};}
+      const ratio=entry.pixelSizeUm/referenceScale;
+      const matrix=[[ratio*c,ratio*s,cropWidth/2-ratio*(c*tx+s*ty)],[-ratio*s,ratio*c,originCropY+ratio*(s*tx-c*ty)],[0,0,1]];
+      for(const frame of [entry.top,entry.bottom]){frame.rawToCrop=matrix;frame.cropWidth=cropWidth;frame.cropHeight=cropHeight;frame.alignment={angle:common,originCropY,individualAngle:fit.angle,matches:fit.matches.map(m=>({id:m.model.id,x:m.candidate.x*factor,y:m.candidate.y*factor})),pixelSizeUm:entry.pixelSizeUm,alignedPixelUm:referenceScale,translationSource:'detection'};}
       entry.alignmentError='';aligned++;
     }
-    const summary={aligned,total:images.length,angle:common};
+    const centered=this.complete(data,-common,referenceScale,false,true,{cropWidth,cropHeight,originCropY});
+    const summary={aligned,total:images.length,centered,angle:common};
     await this.cache(data,{summary,frames:images.map(e=>({error:e.alignmentError||'',roughMatches:e.roughMatches||[],alignment:e.alignment,matrix:e.rawToCrop,width:e.cropWidth,height:e.cropHeight}))});
     return summary;
   }

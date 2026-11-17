@@ -289,10 +289,10 @@
     byId('resolution').textContent = `${viewWidth} × ${viewHeight} px`;
     byId('resolution-um').textContent = `${um(viewWidth)} × ${um(viewHeight)} µm`;
     byId('pixel-size').textContent = `${Number(entry.pixelSizeUm.toPrecision(7))} µm`;
-    byId('image-version').textContent = (cropped ? (entry.alignment?.recalibrated?'RECALIBRATED':'ROUGHLY ALIGNED') : 'ORIGINAL TIFF') + (state.filter === 'image' ? '' : ' · ' + filterLabels[state.filter].toUpperCase());
+    byId('image-version').textContent = (cropped ? (entry.alignment?.translationSource==='centered'?(entry.alignment.rotationKnown===false?'ROTATION UNKNOWN':'ROTATION CORRECTED'):entry.alignment?.recalibrated?'RECALIBRATED':'ROUGHLY ALIGNED') : 'ORIGINAL TIFF') + (state.filter === 'image' ? '' : ' · ' + filterLabels[state.filter].toUpperCase());
     byId('image-channels').textContent = '8-bit grayscale';
     for (const mode of Object.keys(filterLabels)) byId('filter-' + mode).setAttribute('aria-pressed', String(state.filter === mode));
-    if(data.importedProject){byId('view-cropped').disabled=!entry.alignment;byId('view-cropped').title=entry.alignment?(entry.alignment.recalibrated?'Recalibrated from zero-order centers':'Rough alignment from zero-order spots'):(entry.alignmentError||'Finding zero-order spots');}
+    if(data.importedProject){byId('view-cropped').disabled=!entry.alignment;byId('view-cropped').title=entry.alignment?(entry.alignment.translationSource==='centered'?'Corrected around the image center; spot translation is unknown':entry.alignment.recalibrated?'Recalibrated from zero-order centers':'Rough alignment from zero-order spots'):(entry.alignmentError||'Finding zero-order spots');}
     byId('view-cropped').setAttribute('aria-pressed', String(cropped));
     byId('view-original').setAttribute('aria-pressed', String(!cropped));
     const visiblePosition=visibleIndices.indexOf(state.index);
@@ -305,7 +305,7 @@
     byId('previous-image').disabled = adjacentIndex(-1)===undefined;
     byId('next-image').disabled = adjacentIndex(1)===undefined;
     buttons.forEach((button,index)=>{button.setAttribute('aria-pressed',String(index===state.index));button.closest('tr').classList.toggle('is-current',index===state.index);});
-    if(data.importedProject){byId('image-title').textContent=entry.name;if(!entry.hasCalibration){byId('resolution-um').textContent='—';byId('pixel-size').textContent='—';}else byId('pixel-size').title=entry.alignment?.recalibrated?'Pixel spacing after zero-order recalibration':'Initial pixel spacing from Leica sidecar';byId('image-channels').textContent='';document.title=entry.name+' · Image viewer';}
+    if(data.importedProject){byId('image-title').textContent=entry.name;if(!entry.hasCalibration){byId('resolution-um').textContent='—';byId('pixel-size').textContent='—';}else byId('pixel-size').title=entry.alignment?.recalibrated?'Pixel spacing from zero-order recalibration':'Initial pixel spacing averaged from available Leica sidecars';byId('image-channels').textContent='';document.title=entry.name+' · Image viewer';}
     if(data.previewEmpty){byId('image-title').textContent='No image loaded';byId('source-name').textContent='—';byId('selected-number').textContent='—';byId('resolution').textContent='—';byId('resolution-um').textContent='—';byId('pixel-size').textContent='—';byId('image-version').textContent='NO IMAGE';byId('image-channels').textContent='';byId('image-counter').textContent='0 / 0';document.title='Image viewer';}
     else if(!data.importedProject) document.title = `Image ${pad(entry.number)} · Image viewer`;
   }
@@ -375,7 +375,8 @@
     if (!integral.length) return result;
     if (side !== 'top' && side !== 'bottom') throw new Error('Unknown picture side');
     if (entry[side].placeholder) throw new Error('Image pixels unavailable in this image-free fork');
-    const source = entry.file ? await window.ViewerProject.imageUrl(entry) : entry[side].originalSrc;
+    // Native TIFF sampling needs no full-size PNG or image decode.
+    const source = entry.file ? `native:${entry.id}:${side}` : entry[side].originalSrc;
     const normalized=(settings.mode??state.backgroundMode)==='normalized'&&Boolean(entry.backgroundFile)&&!entry.backgroundError;
     const sigma=settings.sigma??state.backgroundSigma,offset=settings.offset??state.zeroOffset,scale=settings.scale??state.intensityScale;
     const context = { intensitySource: source+(normalized?`|background|${entry.backgroundId}|${sigma}|${offset}`:'|original'), intensityOffset: [0,0],
@@ -387,7 +388,9 @@
       } };
     const profiles = window.createIntegralProfiles(() => {});
     if (!(await profiles.ready(context))) throw new Error('Original image intensity unavailable');
+    let processed=0;
     for (const [id, rect] of integral) {
+      if(processed++) await new Promise(resolve=>setTimeout(resolve,0));
       const fraction = (rect.signalRange ?? settings.defaultSignalRange ?? 75) / 100;
       const detail = profiles.details(rect, context, fraction, rect.smoothingSigma ?? 0);
       const position = detail && window.integralPosition(detail, rect.positionMethod || 'maximum');
@@ -402,22 +405,27 @@
   // Cache each image independently so editing one rectangle does not decode every TIFF again.
   if (byId('wavelength-histogram')) {
     const panel=byId('analysis-panel'), chart=byId('wavelength-histogram'), message=byId('wavelength-status'), progress=byId('wavelength-progress'), stats=byId('wavelength-statistics'), gapSection=byId('wavelength-gap-section'), gapPlot=byId('wavelength-gap-plot'), gapCaption=byId('wavelength-gap-caption'), includeInput=byId('include-images'), includeError=byId('include-images-error'), imageExclusion=byId('analysis-image-exclusion'), zoneInput=byId('analysis-zone'), orderInput=byId('analysis-orders'), sideInput=byId('analysis-side'), combinationsNode=byId('analysis-combinations'), binInput=byId('wavelength-bin-width'), binError=byId('wavelength-bin-error'), rangeInput=byId('wavelength-gap-range'), rangeError=byId('wavelength-gap-error'), cache=new Map();
+    const directFilters=byId('analysis-direct-filters'),comparisonFilters=byId('analysis-comparison-filters'),directFormula=byId('analysis-direct-formula'),comparisonFormula=byId('analysis-comparison-formula'),directMode=byId('analysis-direct'),comparisonMode=byId('analysis-comparison');
+    let analysisMode=window.OM10Session.get('analysisMode','direct')==='comparison'?'comparison':'direct';
     let revision=0,timer=0,running=false,initialized=false,livePreview=null,liveDirty=false,liveTimer=0,liveVersion=0,lastPlotData=null;
     scheduleWavelengthAnalysis=(delay=120)=>{
       const requested=++revision;clearTimeout(timer);
+      if(panel.hidden){initialized=false;running=false;progress.hidden=true;return;}
+      updatePitchAvailability();
       timer=setTimeout(()=>run(requested).catch(error=>{if(requested===revision){running=false;initialized=true;progress.hidden=true;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Could not calculate wavelengths: '+(error.message||error);}}),delay);
     };
     previewWavelengthAnalysis=(context,items,centres)=>{
       if(panel.hidden||!data.importedProject)return;
-      if(zoneInput.value!=='__all__'&&(context.entry.zoneId||'__everything__')!==zoneInput.value)return;
-      try{const selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.images.length);if(selected&&!selected.has(context.entry.number))return;}catch(_){return;}
+      if(analysisMode==='direct'){if(zoneInput.value!=='__all__'&&(context.entry.zoneId||'__everything__')!==zoneInput.value)return;try{const selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.images.length);if(selected&&!selected.has(context.entry.number))return;}catch(_){return;}}
       const points=new Map();for(const [id,item] of centres)if(item.measurementRaw)points.set(id,{measurementRaw:{...item.measurementRaw}});
       livePreview={entryId:context.entry.id,signature:JSON.stringify([...items]),centres:points,version:++liveVersion};
       if(running){liveDirty=true;return;}
       if(!liveTimer)liveTimer=setTimeout(()=>{liveTimer=0;liveDirty=false;scheduleWavelengthAnalysis(0);},80);
     };
     endWavelengthPreview=()=>{livePreview=null;liveDirty=false;clearTimeout(liveTimer);liveTimer=0;};
-    binInput.value=window.OM10Session.get('analysisHistogramBinWidth','');
+    const binKey=mode=>`analysisHistogramBinWidth:${mode}`;
+    const binDefault=window.OM10Session.get('analysisHistogramBinWidth','');
+    binInput.value=window.OM10Session.get(binKey(analysisMode),binDefault);
     rangeInput.value=window.OM10Session.get('analysisGapErrorRange','50');
     function plotValue(input,fallback,label){
       if(input.validity.badInput)throw new Error(`${label} must be a positive number.`);
@@ -429,11 +437,12 @@
       const {values,measurements,gap,summary}=lastPlotData;
       try{const width=plotValue(binInput,null,'Bin width');window.ViewerWavelengthHistogram.draw(chart,values,width);binInput.removeAttribute('aria-invalid');binError.hidden=true;}
       catch(error){chart.replaceChildren();binInput.setAttribute('aria-invalid','true');binError.textContent=error.message;binError.hidden=false;}
-      gapSection.hidden=!summary;if(!summary)return;
+      gapSection.hidden=!summary||analysisMode==='comparison';if(!summary||analysisMode==='comparison')return;
       try{const range=plotValue(rangeInput,50,'Gap error');const sweep=window.ViewerWavelengthHistogram.gapSensitivity(measurements,gap,range);window.ViewerWavelengthHistogram.drawGap(gapPlot,sweep);gapCaption.textContent=(summary.sd===null?'Mean · SD unavailable for one measurement':'Mean ± sample SD')+(gap<=range?' · nonpositive gaps omitted':'');rangeInput.removeAttribute('aria-invalid');rangeError.hidden=true;}
       catch(error){gapPlot.replaceChildren();rangeInput.setAttribute('aria-invalid','true');rangeError.textContent=error.message;rangeError.hidden=false;}
     }
-    for(const [input,key,fallback,label] of [[binInput,'analysisHistogramBinWidth',null,'Bin width'],[rangeInput,'analysisGapErrorRange',50,'Gap error']])input.addEventListener('input',()=>{
+    binInput.addEventListener('input',()=>{try{plotValue(binInput,null,'Bin width');window.OM10Session.set(binKey(analysisMode),binInput.value);}catch(_){}renderAnalysisPlots();});
+    for(const [input,key,fallback,label] of [[rangeInput,'analysisGapErrorRange',50,'Gap error']])input.addEventListener('input',()=>{
       try{plotValue(input,fallback,label);window.OM10Session.set(key,input.value);}catch(_){}
       renderAnalysisPlots();
     });
@@ -450,6 +459,54 @@
     const available=window.ViewerWavelengthHistogram.combinations([...(data.maskDesign?.spots?.values()||[])].map(spot=>spot.grating));
     for(const option of available){const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');input.type='checkbox';input.value=option.key;input.checked=!excluded.has(option.key);text.textContent=option.label;label.append(input,text);combinationsNode.append(label);}
     if(!available.length){const empty=document.createElement('p');empty.className='rectangle-note';empty.textContent='No pitch / electron dose combinations available.';combinationsNode.append(empty);}
+    const comparisonKey='analysisComparison:'+String(data.maskDesign?.fingerprint||data.maskDesign?.id||'none');
+    const comparisonSaved=window.OM10Session.get(comparisonKey,{}),pitches=[...new Set(available.map(item=>item.pitch).filter(Number.isFinite))].sort((a,b)=>a-b);
+    const sets=['a','b'].map((id,index)=>{
+      const saved=comparisonSaved[id]||{},set={id,orders:byId(`comparison-orders-${id}`),side:byId(`comparison-side-${id}`),combinations:byId(`comparison-combinations-${id}`)};
+      set.orders.value=['all','-1','1'].includes(saved.order)?saved.order:'all';set.side.value=['all','left','right'].includes(saved.side)?saved.side:'all';
+      const chosen=Array.isArray(saved.selected)?new Set(saved.selected):null,defaultPitch=index===0?pitches[0]:pitches.at(-1);
+      for(const option of available){const label=document.createElement('label'),input=document.createElement('input'),text=document.createElement('span');input.type='checkbox';input.value=option.key;input.dataset.pitch=option.pitch===null?'':String(option.pitch);input.checked=chosen?chosen.has(option.key):(option.pitch!==null&&option.pitch===defaultPitch&&(index===0||pitches.length>1));text.textContent=option.label;label.append(input,text);set.combinations.append(label);}
+      if(!available.length){const empty=document.createElement('p');empty.className='rectangle-note';empty.textContent='No pitch / electron dose combinations available.';set.combinations.append(empty);}
+      return set;
+    });
+    function availablePairs(){
+      let selected;try{selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.previewEmpty?0:data.images.length);}catch(_){return null;}
+      const filters=[...sets,{orders:orderInput,side:sideInput}],result=filters.map(()=>new Set());if(!data.maskDesign)return result;
+      for(const entry of data.images){
+        if((selected&&!selected.has(entry.number))||(zoneInput.value!=='__all__'&&(entry.zoneId||'__everything__')!==zoneInput.value))continue;
+        let all;try{all=grating.rectanglesForExport(entry,state.pictureSide);}catch(_){continue;}
+        const rows=new Map();
+        for(const [id] of all)for(const member of window.ViewerSpotPlacement.members(id)){
+          const spot=data.maskDesign.spots.get(member);if(!spot)continue;
+          let row=rows.get(spot.grating.id);if(!row){row={grating:spot.grating,zero:false,orders:new Set()};rows.set(spot.grating.id,row);}
+          if(spot.kind==='zero')row.zero=true;else if(spot.kind==='minus')row.orders.add(-1);else if(spot.kind==='plus')row.orders.add(1);
+        }
+        for(const row of rows.values())if(row.zero&&row.orders.size){
+          const g=row.grating,key=window.ViewerWavelengthHistogram.combinationKey(g.effectivePitch??g.pitch,g.dose??null),side=window.ViewerSpotPlacement.side(data.maskDesign,g)||'unknown';
+          for(const [i,set] of filters.entries())if((set.side.value==='all'||set.side.value===side)&&(set.orders.value==='all'||row.orders.has(Number(set.orders.value))))result[i].add(key);
+        }
+      }
+      return result;
+    }
+    function updatePitchAvailability(){
+      const pairs=availablePairs();if(!pairs)return;
+      const selected=sets.map((set,i)=>new Set([...set.combinations.querySelectorAll('input:checked')].filter(input=>pairs[i].has(input.value)).map(input=>input.dataset.pitch)));
+      for(const [i,set] of sets.entries()){
+        const used=selected[1-i];
+        for(const input of set.combinations.querySelectorAll('input')){const missing=!pairs[i].has(input.value),occupied=used.has(input.dataset.pitch)&&!input.checked;input.disabled=missing||occupied;input.parentElement.title=missing?'No matching zero-to-first-order pair in the selected images.':occupied?'This pitch is selected in the other set.':'';}
+      }
+      for(const input of combinationsNode.querySelectorAll('input')){const missing=!pairs[2].has(input.value);input.disabled=missing;input.parentElement.title=missing?'No matching zero-to-first-order pair in the selected images.':'';}
+    }
+    function comparisonSettings(set){return {zone:zoneInput.value,order:set.orders.value,side:set.side.value,selected:[...set.combinations.querySelectorAll('input:checked:not(:disabled)')].map(input=>input.value)};}
+    function saveComparison(){window.OM10Session.set(comparisonKey,Object.fromEntries(sets.map(set=>[set.id,{...comparisonSettings(set),selected:[...set.combinations.querySelectorAll('input:checked')].map(input=>input.value)}])));}
+    function refreshAnalysis(){lastPlotData=null;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Updating wavelengths…';scheduleWavelengthAnalysis();}
+    function changeComparison(){updatePitchAvailability();saveComparison();refreshAnalysis();}
+    for(const set of sets){set.orders.addEventListener('change',changeComparison);set.side.addEventListener('change',changeComparison);set.combinations.addEventListener('change',changeComparison);}
+    function showAnalysisMode(){
+      const compare=analysisMode==='comparison';directFilters.hidden=compare;comparisonFilters.hidden=!compare;directFormula.hidden=compare;comparisonFormula.hidden=!compare;directMode.setAttribute('aria-pressed',String(!compare));comparisonMode.setAttribute('aria-pressed',String(compare));gapSection.hidden=compare||!lastPlotData?.summary;updateAnalysisImageNotice();
+    }
+    for(const [button,mode] of [[directMode,'direct'],[comparisonMode,'comparison']])button.addEventListener('click',()=>{if(mode===analysisMode)return;analysisMode=mode;binInput.value=window.OM10Session.get(binKey(mode),binDefault);binInput.removeAttribute('aria-invalid');binError.hidden=true;window.OM10Session.set('analysisMode',mode);showAnalysisMode();refreshAnalysis();});
+    updatePitchAvailability();
     const filterSettings=()=>({zone:zoneInput.value,order:orderInput.value,side:sideInput.value,excluded:new Set([...combinationsNode.querySelectorAll('input:not(:checked)')].map(input=>input.value))});
     function updateFilters(){const next=filterSettings();window.OM10Session.set(filterKey,{zone:zoneInput.disabled?'__all__':next.zone,order:next.order,side:next.side,excluded:[...next.excluded]});lastPlotData=null;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Updating wavelengths…';updateAnalysisImageNotice();scheduleWavelengthAnalysis();}
     zoneInput.addEventListener('change',updateFilters);orderInput.addEventListener('change',updateFilters);sideInput.addEventListener('change',updateFilters);combinationsNode.addEventListener('change',updateFilters);
@@ -464,19 +521,23 @@
       catch(_){/* Show the validation message without saving an incomplete selection. */}
       updateAnalysisImageNotice();lastPlotData=null;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Updating wavelengths…';scheduleWavelengthAnalysis();
     });
+    showAnalysisMode();
     const settings=()=>({mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)});
     async function run(requested){
       if(requested!==revision)return;
       if(data.importedProject&&!alignmentReady)return;
       running=true;initialized=true;progress.hidden=true;
-      let selected;try{selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.previewEmpty?0:data.images.length);includeInput.removeAttribute('aria-invalid');includeError.hidden=true;}
+      let selected=null,comparisonSelections=[];
+      try{selected=window.ViewerWavelengthHistogram.parseImages(includeInput.value,data.previewEmpty?0:data.images.length);includeInput.removeAttribute('aria-invalid');includeError.hidden=true;}
       catch(error){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;includeInput.setAttribute('aria-invalid','true');includeError.textContent=error.message;includeError.hidden=false;message.textContent='';return;}
+      if(analysisMode==='comparison')comparisonSelections=sets.map(set=>{const f=comparisonSettings(set);return {...f,images:selected,excluded:new Set(available.filter(option=>!f.selected.includes(option.key)).map(option=>option.key))};});
       if(!data.importedProject||!data.maskDesign){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Load images and a mask design to calculate wavelengths.';return;}
       const gap=data.nominalGapUm;
-      if(!(Number.isFinite(gap)&&gap>0)){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Set the gap in the import menu to calculate wavelengths.';return;}
-      const filtered=data.images.filter(entry=>(!selected||selected.has(entry.number))&&(zoneInput.value==='__all__'||(entry.zoneId||'__everything__')===zoneInput.value));
+      if(analysisMode==='direct'&&!(Number.isFinite(gap)&&gap>0)){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Set the gap in the import menu to calculate wavelengths.';return;}
+      const matchesImage=(entry,filter)=>(!filter.images||filter.images.has(entry.number))&&(filter.zone==='__all__'||(entry.zoneId||'__everything__')===filter.zone);
+      const filtered=analysisMode==='direct'?data.images.filter(entry=>(!selected||selected.has(entry.number))&&(zoneInput.value==='__all__'||(entry.zoneId||'__everything__')===zoneInput.value)):data.images.filter(entry=>comparisonSelections.some(filter=>matchesImage(entry,filter)));
       if(!filtered.length){running=false;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent=data.images.length?'No images match the analysis filters.':'No images loaded.';return;}
-      message.textContent='Calculating wavelengths…';progress.max=filtered.length;progress.value=0;progress.hidden=panel.hidden;const options=settings(),analysisFilters=filterSettings(),side=state.pictureSide,values=[],measurements=[];let unavailable=0,hasPairs=false;
+      message.textContent='Calculating wavelengths…';progress.max=filtered.length;progress.value=0;progress.hidden=panel.hidden;const options=settings(),analysisFilters=filterSettings(),side=state.pictureSide,values=[],measurements=[],comparisonPairs=[[],[]],comparisonExpected=[0,0];let unavailable=0,hasPairs=false;
       for(const [index,entry] of filtered.entries()){
         progress.value=index;message.textContent=`Calculating wavelengths… ${index+1} / ${filtered.length} images`;
         if(requested!==revision)return;
@@ -514,20 +575,34 @@
           const pairs=window.ViewerDistances.measure(data.maskDesign,centres,entry),valid=pairs.filter(p=>Number.isFinite(p.pitch)&&p.pitch>0&&Number.isFinite(p.distanceUm));
           result={key,pairs:valid,expected};cache.set(entry.id,result);
         }
-        const matches=pair=>window.ViewerWavelengthHistogram.matchesFilters(pair,analysisFilters),included=result.pairs.filter(matches);
-        values.push(...window.ViewerWavelengthHistogram.wavelengths(included,gap));measurements.push(...included);unavailable+=Math.max(0,result.expected.filter(matches).length-included.length);
+        if(analysisMode==='direct'){
+          const matches=pair=>window.ViewerWavelengthHistogram.matchesFilters(pair,analysisFilters),included=result.pairs.filter(matches);
+          values.push(...window.ViewerWavelengthHistogram.wavelengths(included,gap));measurements.push(...included);unavailable+=Math.max(0,result.expected.filter(matches).length-included.length);
+        }else for(const [i,filter] of comparisonSelections.entries())if(matchesImage(entry,filter)){
+          comparisonExpected[i]+=result.expected.filter(pair=>window.ViewerWavelengthHistogram.matchesFilters(pair,filter)).length;
+          for(const pair of result.pairs)if(window.ViewerWavelengthHistogram.matchesFilters(pair,filter))comparisonPairs[i].push({...pair,imageId:entry.id});
+        }
         if(decoded||index%40===39)await new Promise(resolve=>setTimeout(resolve,0));
       }
       if(requested!==revision)return;
       progress.value=filtered.length;progress.hidden=true;running=false;
+      const comparisonResult=analysisMode==='comparison'?window.ViewerWavelengthHistogram.comparisonValues(...comparisonPairs):null;if(comparisonResult)values.push(...comparisonResult.values);
       const summary=window.ViewerWavelengthHistogram.statistics(values),format=v=>v===null?'—':Number(v.toPrecision(5)).toString();
       stats.hidden=!summary;if(summary){stats.textContent=`Mean ${format(summary.mean)} · Median ${format(summary.median)} · SD ${format(summary.sd)} nm`;stats.title='SD is the sample standard deviation (n − 1).';}
       lastPlotData={values,measurements,gap,summary};renderAnalysisPlots();
-      if(values.length)message.textContent=`${values.length} measurement${values.length===1?'':'s'} · gap ${gap} µm`+(unavailable?` · ${unavailable} unavailable`:'');
+      if(analysisMode==='comparison'){
+        const missing=sets.filter((set,i)=>!comparisonPairs[i].length).map(set=>`Set ${set.id.toUpperCase()}`),empty=sets.filter(set=>!set.combinations.querySelector('input:checked')).map(set=>`Set ${set.id.toUpperCase()}`);
+        if(values.length)message.textContent=`${values.length} comparison${values.length===1?'':'s'}`+(comparisonResult.rejected?` · ${comparisonResult.rejected} without a physical solution`:'');
+        else if(comparisonResult.rejected)message.textContent=`No physical solution · ${comparisonResult.rejected} comparison${comparisonResult.rejected===1?'':'s'}.`;
+        else if(empty.length)message.textContent=`${empty.join(' and ')}: select at least one pitch.`;
+        else if(missing.length){const unavailableCentre=sets.some((set,i)=>!comparisonPairs[i].length&&comparisonExpected[i]>0);message.textContent=`${missing.join(' and ')}: no usable 0-to-±1 distances.`+(unavailableCentre?' Check calibration and rectangle profiles.':' Add matching zero- and first-order rectangles for the selected pitches.');}
+        else message.textContent='No image has usable distances for both sets.';
+      }
+      else if(values.length)message.textContent=`${values.length} measurement${values.length===1?'':'s'} · gap ${gap} µm`+(unavailable?` · ${unavailable} unavailable`:'');
       else {const missingGeometry=[...data.maskDesign.spots.values()].some(spot=>!(spot.grating.width>0&&spot.grating.height>0));const missingAlignment=filtered.some(entry=>entry.hasCalibration&&!entry.alignment);message.textContent=unavailable?`No usable distances · ${unavailable} unavailable.`+(missingGeometry&&missingAlignment?' Add missing grating dimensions in Mask Design → Edit.':''):hasPairs?'No measurements match the selected filters.':'Add matching 0 and ±1 rectangles to calculate wavelengths.';}
       if(liveDirty&&livePreview){liveDirty=false;scheduleWavelengthAnalysis(0);}
     }
-    new MutationObserver(()=>{progress.hidden=panel.hidden||!running;if(!panel.hidden&&!initialized)scheduleWavelengthAnalysis();}).observe(panel,{attributes:true,attributeFilter:['hidden']});
+    new MutationObserver(()=>{progress.hidden=panel.hidden||!running;if(panel.hidden&&running){revision++;running=false;initialized=false;}else if(!panel.hidden&&!initialized)scheduleWavelengthAnalysis();}).observe(panel,{attributes:true,attributeFilter:['hidden']});
     scheduleWavelengthAnalysis();
   }
 
@@ -634,7 +709,7 @@
       // for a newly started IndexedDB transaction to be relied upon.
       flushCamera();
       status.hidden = true;
-      byId('view-status').textContent = entry.placeholder ? 'No image loaded'  : (filter === 'image' ? (data.importedProject?(view==='cropped'?(entry.alignment?.recalibrated?'Recalibrated · zero-order centers':'Roughly aligned · check zero-order positions'):entry.hasCalibration?(entry.alignment?.recalibrated?'Original TIFF · recalibrated pixel scale':'Original TIFF · sidecar pixel scale'):'Original TIFF · calibration unavailable'):'Roughly aligned · overlay provisional') : `${filterLabels[filter]} · ${data.importedProject?(entry.hasCalibration?(entry.alignment?.recalibrated?'recalibrated':'sidecar pixel scale'):'calibration unavailable'):'overlay position provisional'}`);
+      byId('view-status').textContent = entry.placeholder ? 'No image loaded'  : (filter === 'image' ? (data.importedProject?(view==='cropped'?(entry.alignment?.translationSource==='centered'?(entry.alignment.rotationKnown===false?'Rotation unavailable · spot translation unknown':'Rotation corrected · spot translation unknown'):entry.alignment?.recalibrated?'Recalibrated · zero-order centers':'Roughly aligned · check zero-order positions'):entry.hasCalibration?(entry.alignment?.recalibrated?'Original TIFF · recalibrated pixel scale':'Original TIFF · sidecar pixel scale'):'Original TIFF · calibration unavailable'):'Roughly aligned · overlay provisional') : `${filterLabels[filter]} · ${data.importedProject?(entry.hasCalibration?(entry.alignment?.recalibrated?'recalibrated':'sidecar pixel scale'):'calibration unavailable'):'overlay position provisional'}`);
       if(state.backgroundMode==='normalized')byId('view-status').textContent=entry.backgroundError||(!entry.backgroundFile?'No background assigned · showing original':`Background: ${entry.backgroundName} · Gaussian σ ${state.backgroundSigma} px`);
       if (queuedCopy) {
         const { resnap } = queuedCopy;
@@ -1010,11 +1085,11 @@
       if (stillCurrent()) feedback.textContent = 'Could not copy rectangles: ' + error.message;
     }
   }
-  // In Position mode, select every rectangle in the currently displayed image.
+  // Select all measurements in the current image from either sidebar tab.
   document.addEventListener('keydown', event => {
     if (!document.getElementById('folder-loader').hidden) return;
     if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
-        event.key.toLowerCase() !== 'a' || !state.ready || state.cleanImage || byId('position-panel').hidden ||
+        event.key.toLowerCase() !== 'a' || !state.ready || state.cleanImage ||
         event.target.isContentEditable || event.target.closest?.('input, textarea, select, [contenteditable], #rectangle-menu, #sidecar-dialog, #gap-correction-menu, #analysis-calc-settings, #compare-histogram-settings')) return;
     event.preventDefault(); event.stopPropagation();
     if (!event.repeat && !grating.isDragging()) grating.selectAll();
@@ -1064,12 +1139,13 @@
   // for other images and never affect the common scale or rotation.
   const recalibrateButton=byId('recalibrate'), recalibrationStatus=byId('recalibration-status');
   let alignmentReady=false;
-  function calibrationSignature(){
+  function calibrationSignature(useSidecarValues=false){
     const mask=data.maskDesign;
     return JSON.stringify({version:1,side:state.pictureSide,mask:mask?.id,fingerprint:mask?.fingerprint,
       spots:mask?[...mask.spots.values()].map(s=>[s.id,s.x,s.y,s.kind,s.grating.width,s.grating.height]):[],
-      zones:mask?.zones,images:data.images.map(e=>[e.id,e.width,e.height,e.basePixelSizeUm,e.zoneId])});
+      zones:mask?.zones,images:data.images.map(e=>[e.id,e.width,e.height,useSidecarValues?e.sidecarPixelSizeUm:e.basePixelSizeUm,e.zoneId])});
   }
+  const matchesCalibrationSignature=signature=>signature===calibrationSignature()||signature===calibrationSignature(true);
   function zeroSnapshots(){
     return data.images.map(entry=>{
       const items=grating.rectanglesForExport(entry,state.pictureSide), zero=new Map(),seen=new Set();
@@ -1094,17 +1170,31 @@
   }
   function applyCalibration(record){
     const plans=new Map(record.plan.images.map(p=>[p.id,p]));
-    for(const entry of data.images){const p=plans.get(entry.id);if(!p)continue;
+    const sharedPixel=record.fit.pixelSizeUm??record.plan.alignedPixelUm;
+    for(const entry of data.images){let p=plans.get(entry.id);
+      if(!p?.matrix || p.source==='centered'){
+        const pixelSizeUm=sharedPixel;
+        const reference=record.plan.images.find(item=>item.source!=='centered'&&item.matrix);
+        const frame=reference?{cropWidth:reference.cropWidth,cropHeight:reference.cropHeight,originCropY:reference.originCropY}:null;
+        p=window.ViewerRecalibration.centered({id:entry.id,width:entry.width,height:entry.height,pixelSizeUm},record.fit.rotation,record.plan.alignedPixelUm,frame);plans.set(entry.id,p);
+      }
+      // Old saved plans could have different per-image scales. Preserve the
+      // mapped image center while replacing their linear part with the common fit.
+      if(p.matrix && Number.isFinite(sharedPixel) && sharedPixel>0){
+        const m=p.matrix,c=Math.cos(record.fit.rotation),s=Math.sin(record.fit.rotation),x=(entry.width-1)/2,y=(entry.height-1)/2;
+        const oldX=m[0][0]*x+m[0][1]*y+m[0][2],oldY=m[1][0]*x+m[1][1]*y+m[1][2];
+        p={...p,pixelSizeUm:sharedPixel,alignedPixelUm:sharedPixel,matrix:[[c,-s,oldX-c*x+s*y],[s,c,oldY-s*x-c*y],[0,0,1]]};plans.set(entry.id,p);
+      }
       for(const frame of [entry.top,entry.bottom]){
-        frame.pixelSizeUm=p.pixelSizeUm;
+        if(Number.isFinite(p.pixelSizeUm)&&p.pixelSizeUm>0){frame.pixelSizeUm=p.pixelSizeUm;frame.hasCalibration=true;frame.calibrationSource='Zero-order recalibration';}
         if(p.matrix){frame.rawToCrop=p.matrix;frame.cropWidth=p.cropWidth;frame.cropHeight=p.cropHeight;
-          frame.alignment={...(frame.alignment||{}),angle:-record.fit.rotation,originCropY:p.originCropY,alignedPixelUm:p.alignedPixelUm,recalibrated:true,translationSource:p.source};
+          frame.alignment={...(frame.alignment||{}),angle:-record.fit.rotation,originCropY:p.originCropY,alignedPixelUm:p.alignedPixelUm,recalibrated:true,rotationKnown:true,translationSource:p.source};
         }else{frame.rawToCrop=[[1,0,0],[0,1,0],[0,0,1]];frame.cropWidth=frame.width;frame.cropHeight=frame.height;frame.alignment=null;}
       }
-      entry.alignmentError=p.matrix?'':'No zero-order center available for translation';
+      entry.alignmentError=p.source==='centered'?'Rotation and scale corrected; spot translation is unknown':'';
     }
-    const rect=record.plan.images.filter(p=>p.source==='rectangles').length,auto=record.plan.images.filter(p=>p.source==='detection').length,missing=data.images.length-rect-auto;
-    recalibrationStatus.textContent=`${record.fit.points} centers · ×${record.fit.factor.toFixed(5)} · ${(record.fit.rotation*180/Math.PI).toFixed(3)}° · RMS ${record.fit.rmsUm.toFixed(2)} µm. ${rect} measured, ${auto} detected${missing?`, ${missing} unavailable`:''}.`;recalibrationStatus.title=`${record.fit.points} zero-order centers from ${record.fit.images} images; ${rect} images aligned from rectangles, ${auto} from detection, ${missing} unavailable.`;
+    const rect=[...plans.values()].filter(p=>p.source==='rectangles').length,auto=[...plans.values()].filter(p=>p.source==='detection').length,missing=data.images.length-rect-auto;
+    recalibrationStatus.textContent=`${record.fit.points} centers · ${Number(sharedPixel.toPrecision(7))} µm/px${Number.isFinite(record.fit.factor)?` · ×${record.fit.factor.toFixed(5)}`:''} · ${(record.fit.rotation*180/Math.PI).toFixed(3)}° · RMS ${record.fit.rmsUm.toFixed(2)} µm. ${rect} measured, ${auto} detected${missing?`, ${missing} centered without spot translation`:''}.`;recalibrationStatus.title=`${record.fit.points} zero-order centers from ${record.fit.images} images; ${rect} images aligned from rectangles, ${auto} from detection, ${missing} centered without spot translation.`;
     byId('viewer-alignment-status').textContent='Recalibrated from zero-order rectangles';
     for(const entry of data.images)compare?.invalidate(entry.filename);
     compare?.refreshSide();notifyCalculator('resetSide');midpointMask=null;scheduleWavelengthAnalysis();
@@ -1127,7 +1217,7 @@
         if(i%8===0){recalibrationStatus.textContent=`Reading zero-order centers… ${i+1} / ${snapshots.length}`;await new Promise(resolve=>setTimeout(resolve,0));}
       }
       if(side!==state.pictureSide||signature!==calibrationSignature()||before!==snapshotKey(zeroSnapshots())||JSON.stringify(settings)!==JSON.stringify({mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)}))throw new Error('Measurements or settings changed during recalibration. Please run it again.');
-      const fit=window.ViewerRecalibration.fit(observations);if(!fit)throw new Error('At least one image needs two distinct usable zero-order rectangle centers and a sidecar pixel size.');
+      const fit=window.ViewerRecalibration.fitShared(observations);if(!fit)throw new Error('At least one image needs two distinct usable zero-order rectangle centers.');
       const bounds=calibrationBounds();if(!bounds)throw new Error('The mask design needs grating positions and dimensions.');
       const plan=window.ViewerRecalibration.plan(observations,fit,bounds);if(!plan)throw new Error('No calibrated image is available.');
       const record={version:1,signature,fit,plan};window.OM10Session.set('recalibration-v1',record);await window.OM13Storage.flush();
@@ -1142,11 +1232,11 @@
     return {version:1,signature:calibrationSignature(),images:data.images.map(entry=>({id:entry.id,error:entry.alignmentError||'',roughMatches:entry.roughMatches||[],frames:[entry.top,entry.bottom].map(frame=>({pixelSizeUm:frame.pixelSizeUm,rawToCrop:frame.rawToCrop,cropWidth:frame.cropWidth,cropHeight:frame.cropHeight,alignment:frame.alignment}))}))};
   }
   function restoreStateAlignment(record){
-    if(record?.version!==1||record.signature!==calibrationSignature()||!Array.isArray(record.images)||record.images.length!==data.images.length)return false;
+    if(record?.version!==1||!matchesCalibrationSignature(record.signature)||!Array.isArray(record.images)||record.images.length!==data.images.length)return false;
     const entries=new Map(record.images.map(item=>[item.id,item]));
     for(const entry of data.images){const item=entries.get(entry.id);if(!item||!Array.isArray(item.frames)||item.frames.length!==2)return false;
       for(const frame of item.frames){if(!Number.isFinite(frame.pixelSizeUm)||frame.pixelSizeUm<=0||!Number.isFinite(frame.cropWidth)||frame.cropWidth<1||!Number.isFinite(frame.cropHeight)||frame.cropHeight<1||!Array.isArray(frame.rawToCrop)||frame.rawToCrop.length!==3||!frame.rawToCrop.every(row=>Array.isArray(row)&&row.length===3&&row.every(Number.isFinite)))return false;}}
-    for(const entry of data.images){const item=entries.get(entry.id);entry.alignmentError=item.error||'';entry.roughMatches=Array.isArray(item.roughMatches)?item.roughMatches:[];[entry.top,entry.bottom].forEach((frame,index)=>{const value=item.frames[index];frame.pixelSizeUm=value.pixelSizeUm;frame.rawToCrop=value.rawToCrop;frame.cropWidth=value.cropWidth;frame.cropHeight=value.cropHeight;frame.alignment=value.alignment;});}return true;
+    for(const entry of data.images){const item=entries.get(entry.id);entry.alignmentError=item.error||'';entry.roughMatches=Array.isArray(item.roughMatches)?item.roughMatches:[];[entry.top,entry.bottom].forEach((frame,index)=>{const value=item.frames[index];frame.pixelSizeUm=value.pixelSizeUm;frame.rawToCrop=value.rawToCrop;frame.cropWidth=value.cropWidth;frame.cropHeight=value.cropHeight;frame.alignment=value.alignment;if(value.alignment?.recalibrated){frame.hasCalibration=true;frame.calibrationSource='Zero-order recalibration';}});}return true;
   }
   window.setupPositionsExport?.({data,finish:grating.finish,getRectangles:(entry,side)=>grating.rectanglesForExport(entry,side),background:normalizedView,getProcessing:()=>({backgroundMode:state.backgroundMode,backgroundSigma:state.backgroundSigma,zeroOffset:state.zeroOffset,intensityScale:state.intensityScale,displayFilter:state.filter,filters:window.OM10Filters.get(),defaultSignalRange:window.OM10Session.get('integralDummyPercent',75),pictureSide:state.pictureSide})});
   window.setupViewerState?.({data,alignmentSnapshot:savedStateAlignment,beforeSave:async()=>{
@@ -1154,7 +1244,7 @@
     grating.finish();flushCamera();window.OM10Session.set('viewerDoseFilter',byId('viewer-dose-filter').value);window.OM10Session.set('viewerZoneFilter',byId('viewer-zone-filter').value);
   }});
 
-  if(data.importedProject&&data.maskDesign)byId('import-rectangles').disabled=false;
+  if(data.importedProject&&data.maskDesign&&byId('import-rectangles'))byId('import-rectangles').disabled=false;
   window.addEventListener('pagehide', flushCamera);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushCamera(); });
   const applyInitialFilters=buildMap();
@@ -1173,5 +1263,5 @@
   const restoredStateAlignment=Boolean(data.importedProject&&data.maskDesign&&restoreStateAlignment(savedAlignment));
   if(data.importedProject&&!visibleIndices.length){applyInitialFilters();window.restoreViewerPanels();}
   else selectImage(visibleIndices.includes(index)||!data.importedProject?index:visibleIndices[0], null, validCamera ? camera : null).then(() => {if(window.viewerProjectError){status.hidden=false;status.textContent='Could not restore project: '+window.viewerProjectError;}window.restoreViewerPanels();});
-  if(data.importedProject&&data.maskDesign){const notice=byId('viewer-alignment-status'),restored=restoredStateAlignment;notice.textContent=restored?'Restoring saved alignment…':'Finding zero-order spots…';(restored?Promise.resolve({aligned:data.images.filter(e=>e.alignment).length,total:data.images.length}):window.ViewerAlignment.run(data,(n,total)=>{notice.textContent=`Finding zero-order spots… ${n} / ${total}`;})).then(result=>{notice.textContent=`Rough alignment: ${result.aligned} / ${result.total} images`+(result.aligned<result.total?' · unavailable images stay original':'');const savedCalibration=window.OM10Session.get('recalibration-v1',null);if(savedCalibration?.version===1&&savedCalibration.signature===calibrationSignature())applyCalibration(savedCalibration);else if(savedCalibration)recalibrationStatus.textContent='Saved calibration does not match this project; recalibrate again.';scheduleWavelengthAnalysis();if(!restored&&visibleIndices.includes(state.index))selectImage(state.index);}).catch(error=>{notice.textContent='Rough alignment failed: '+error.message;}).finally(()=>{alignmentReady=true;recalibrateButton.disabled=false;scheduleWavelengthAnalysis();});}
+  if(data.importedProject&&data.maskDesign){const notice=byId('viewer-alignment-status'),restored=restoredStateAlignment;notice.textContent=restored?'Restoring saved alignment…':'Finding zero-order spots…';(restored?Promise.resolve().then(()=>{const ref=data.images.find(e=>e.alignment&&e.alignment.translationSource!=='centered'),rotation=ref?.alignment?-ref.alignment.angle:0,centered=window.ViewerAlignment.complete(data,rotation,ref?.alignment?.alignedPixelUm,Boolean(ref?.alignment?.recalibrated),Boolean(ref),ref?{cropWidth:ref.cropWidth,cropHeight:ref.cropHeight,originCropY:ref.alignment.originCropY}:null);return {aligned:data.images.filter(e=>e.alignment?.translationSource!=='centered').length,total:data.images.length,centered};}):window.ViewerAlignment.run(data,(n,total)=>{notice.textContent=`Finding zero-order spots… ${n} / ${total}`;})).then(result=>{notice.textContent=`Rough alignment: ${result.aligned} / ${result.total} images`+(result.angle===null?' · rotation could not be estimated':result.aligned<result.total?' · remaining images corrected around their centers':'');const savedCalibration=window.OM10Session.get('recalibration-v1',null);if(savedCalibration?.version===1&&matchesCalibrationSignature(savedCalibration.signature))applyCalibration(savedCalibration);else if(savedCalibration)recalibrationStatus.textContent='Saved calibration does not match this project; recalibrate again.';scheduleWavelengthAnalysis();if(visibleIndices.includes(state.index))selectImage(state.index);}).catch(error=>{notice.textContent='Rough alignment failed: '+error.message;}).finally(()=>{alignmentReady=true;recalibrateButton.disabled=false;scheduleWavelengthAnalysis();});}
 })();

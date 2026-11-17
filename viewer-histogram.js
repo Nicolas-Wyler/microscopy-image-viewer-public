@@ -35,6 +35,7 @@ window.createVisibleHistogram = function (canvas, normalized, portableSource) {
         const vw=snapshot.viewportWidth,vh=snapshot.viewportHeight, scale=snapshot.scale;
         const tx=vw/2+snapshot.panX-snapshot.frameWidth*scale/2,ty=vh/2+snapshot.panY-snapshot.frameHeight*scale/2;
         for(let y=0;y<height;y++) {
+          if(y && y%48===0){await new Promise(resolve=>setTimeout(resolve,0));if(id!==serial)return;}
           const py=y+off[1];
           for(let x=0;x<width;x++) {
             const px=x+off[0], u=m[0][0]*px+m[0][1]*py+m[0][2],v=m[1][0]*px+m[1][1]*py+m[1][2];

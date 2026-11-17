@@ -5,7 +5,7 @@
   const name=document.getElementById('mask-design-name'),subtitle=document.getElementById('mask-editor-subtitle'),notice=document.getElementById('mask-editor-notice');
   const body=document.getElementById('mask-editor-body'),add=document.getElementById('mask-add-row'),removeCjob=document.getElementById('mask-remove-cjob'),save=document.getElementById('mask-editor-save');
   const preview=document.getElementById('mask-preview'),empty=document.getElementById('mask-preview-empty'),error=document.getElementById('mask-editor-error');
-  const sadp=document.getElementById('mask-sadp');
+  const sadp=document.getElementById('mask-sadp'),mirror=document.getElementById('mask-mirror-y'),rotate=document.getElementById('mask-rotate'),rotationStatus=document.getElementById('mask-rotation-status');
   const fields=['pitch','x','y','width','height','dose'];let api,ready=false,draft={name:'New Mask Design',rows:[]},imported=false;
   function blankRow(){return {id:'grating-'+crypto.randomUUID(),pitch:'',x:'',y:'',width:'',height:'',dose:''};}
   function fromGrating(g){return {id:g.spotBaseId||'grating-'+crypto.randomUUID(),pitch:String(g.pitch??''),x:String(g.x??''),y:String(g.y??''),width:String(g.width??''),height:String(g.height??''),dose:String(g.dose??'')};}
@@ -14,8 +14,10 @@
     const source=api.getImported();imported=Boolean(source);error.textContent='';
     if(imported){const stored=api.getImportedDraft();draft={name:source.name.replace(/\.cjob$/i,''),rows:api.getImportedRows().map(row=>{const previous=stored?.rows?.find(item=>item.id===row.id),values={...row};for(const field of fields){const value=previous && row.editableFields.includes(field)?previous[field]:row[field];values[field]=typeof value==='number'&&Number.isFinite(value)?String(Number(value.toFixed(6))):String(value??'');}return values;})};}
     else {const stored=api.getDraft(),manual=api.getManual();draft=stored?structuredClone(stored):{name:manual?.name||'New Mask Design',rows:(manual?.model?.windows[0]?.gratings||[]).map(fromGrating)};}
+    rotationStatus.textContent=imported&&api.getRotation()?'Rotated 180°':'';
     name.value=draft.name;name.disabled=imported;removeCjob.hidden=!imported;add.disabled=imported;save.disabled=false;save.textContent=imported?'Save missing values':'Save design';
-    sadp.checked=(!imported && draft.sadp!=null)?draft.sadp:api.getSadp();api.prepareGeometry();
+    sadp.checked=(!imported && draft.sadp!=null)?draft.sadp:api.getSadp();
+    mirror.checked=(!imported && draft.mirrorY!=null)?draft.mirrorY:api.getMirrorY();api.prepareGeometry();
     subtitle.textContent=imported?source.name:'Scratch design';
     notice.textContent=imported?'Values supplied by the CJOB are locked. Fill in missing values below; matching patterns share their dimensions and pitch.':'Enter one row per vertical grating. Your draft is saved locally as you edit.';
     renderRows();drawPreview();
@@ -39,7 +41,7 @@
     return n;
   }
   function drawPreview(){
-    const previewGeometry=row=>{const keys=['x','y','width','height'];if(keys.some(field=>String(row[field]??'').trim()===''))return null;const n=Object.fromEntries(keys.map(field=>[field,Number(row[field])]));if(Object.values(n).some(v=>!Number.isFinite(v))||n.width<=0||n.height<=0)return null;return {...n,pitch:row.pitch||'Unknown'};};
+    const previewGeometry=row=>{const keys=['x','y','width','height'];if(keys.some(field=>String(row[field]??'').trim()===''))return null;const n=Object.fromEntries(keys.map(field=>[field,Number(row[field])]));if(Object.values(n).some(v=>!Number.isFinite(v))||n.width<=0||n.height<=0)return null;return {...n,x:mirror.checked?-n.x:n.x,pitch:row.pitch||'Unknown'};};
     const valid=draft.rows.map(row=>({row,n:previewGeometry(row)})).filter(item=>item.n),ns='http://www.w3.org/2000/svg',W=900,H=240,margin=18;
     preview.replaceChildren();preview.setAttribute('viewBox',`0 0 ${W} ${H}`);empty.hidden=Boolean(valid.length);
     if(!valid.length)return;
@@ -50,10 +52,16 @@
     for(const {n} of valid){const rect=document.createElementNS(ns,'rect');for(const [key,value] of Object.entries({x:W/2+(n.x-cx-n.width/2)*scale,y:H/2-(n.y-cy+n.height/2)*scale,width:n.width*scale,height:n.height*scale,fill:'url(#mask-preview-lines)',stroke:'#d8eb87','stroke-width':1.5,'data-grating':'true','data-x':n.x,'data-y':n.y}))rect.setAttribute(key,String(value));const title=document.createElementNS(ns,'title');title.textContent=`${n.pitch} nm · (${n.x}, ${n.y}) µm · ${n.width} × ${n.height} µm`;rect.append(title);preview.append(rect);}
   }
   edit.addEventListener('click',()=>{load();dialog.showModal();});close.addEventListener('click',()=>dialog.close());dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+  rotate.addEventListener('click',()=>{
+    for(const row of draft.rows)for(const field of ['x','y']){const value=String(row[field]??'').trim();if(value!==''&&Number.isFinite(Number(value)))row[field]=String(-Number(value));}
+    if(imported){const rotated=!api.getRotation();api.setRotation(rotated);rotationStatus.textContent=rotated?'Rotated 180°':'';}
+    persistDraft();renderRows();drawPreview();
+  });
   sadp.addEventListener('change',()=>{if(!imported){draft.sadp=sadp.checked;persistDraft();}api.setSadp(sadp.checked);});
+  mirror.addEventListener('change',()=>{if(!imported){draft.mirrorY=mirror.checked;persistDraft();}api.setMirrorY(mirror.checked);drawPreview();});
   name.addEventListener('input',()=>{draft.name=name.value;error.textContent='';persistDraft();});
   add.addEventListener('click',()=>{if(imported)return;draft.rows.push(blankRow());persistDraft();renderRows();drawPreview();body.lastElementChild?.querySelector('input')?.focus();});
   removeCjob.addEventListener('click',()=>{api.onRemoveCjob();load();});
-  save.addEventListener('click',()=>{if(imported){for(const row of draft.rows)for(const field of row.editableFields){const value=String(row[field]??'').trim();if(value!==''&&(!Number.isFinite(Number(value))||(field==='dose'?Number(value)<0:Number(value)<=0))){error.textContent='Enter positive pitch and dimensions and a non-negative electron dose.';return;}}api.onSaveImported(structuredClone(draft.rows));dialog.close();return;}const title=draft.name.trim();if(!title){error.textContent='Enter a design name.';name.focus();return;}const bad=draft.rows.findIndex(row=>!numeric(row));if(bad>=0){error.textContent=`Complete valid dimensions and pitch for grating ${bad+1}; electron dose may be left blank.`;return;}api.onSave(title,structuredClone(draft.rows),sadp.checked);dialog.close();});
+  save.addEventListener('click',()=>{if(imported){for(const row of draft.rows)for(const field of row.editableFields){const value=String(row[field]??'').trim();if(value!==''&&(!Number.isFinite(Number(value))||(field==='dose'?Number(value)<0:Number(value)<=0))){error.textContent='Enter positive pitch and dimensions and a non-negative electron dose.';return;}}api.onSaveImported(structuredClone(draft.rows));dialog.close();return;}const title=draft.name.trim();if(!title){error.textContent='Enter a design name.';name.focus();return;}const bad=draft.rows.findIndex(row=>!numeric(row));if(bad>=0){error.textContent=`Complete valid dimensions and pitch for grating ${bad+1}; electron dose may be left blank.`;return;}api.onSave(title,structuredClone(draft.rows),sadp.checked,mirror.checked);dialog.close();});
   window.MaskDesignEditor={configure(options){api=options;},setReady(value){ready=value;edit.disabled=!ready;}};
 })();

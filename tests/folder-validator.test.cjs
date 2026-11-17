@@ -55,3 +55,9 @@ test('accepts selected TIFF files as an image selection without sidecars',async(
 test('rejects non-TIFF files from direct image selections',async()=>{
  await assert.rejects(validateFolder({files:[f('Selected images/a.tif',tiff(20,30)),f('Selected images/b.png',new Blob(['png']))],directories:['Selected images'],selectionKind:'files'}),/only.*tiff/i);
 });
+
+test('folder dimensions use the TIFF orientation',async()=>{
+ const b=new ArrayBuffer(50),v=new DataView(b);v.setUint16(0,0x4949);v.setUint16(2,42,true);v.setUint32(4,8,true);v.setUint16(8,3,true);
+ for(const [i,tag,value] of [[0,256,300],[1,257,200],[2,274,6]]){const p=10+i*12;v.setUint16(p,tag,true);v.setUint16(p+2,3,true);v.setUint32(p+4,1,true);v.setUint16(p+8,value,true);}
+ const {dimensions}=require('../folder-validator.js');assert.deepEqual(await dimensions(new Blob([b])),{width:200,height:300});
+});

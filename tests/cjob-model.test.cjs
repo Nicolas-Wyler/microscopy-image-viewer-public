@@ -20,3 +20,12 @@ test('repetition expands centred positions using vector plus spacing on each axi
  assert.deepEqual(grid.map(p=>p.indices),[[1,1],[1,2],[1,3],[2,1],[2,2],[2,3]]);
  assert.throws(()=>expandPlacements([[0,0]],[{count:1001,vector:[1,0],space:[0,0]}]),/unsupported/);
 });
+
+test('wafer prediction mirrors x while leaving the mask design and y unchanged',()=>{
+ const {predictedGrating}=require('../cjob-model.js');
+ const source={x:120,y:35,width:80,height:70,orientation:'vertical',pitch:44};
+ const predicted=predictedGrating(source);assert.equal(predicted.x,-120);assert.equal(predicted.y,35);
+ assert.equal(source.x,120);assert.equal(predicted.width,80);assert.equal(predicted.pitch,44);
+ const d=displacement(13.5,300,44);
+ assert.ok(predicted.x-d<predicted.x);assert.ok(predicted.x+d>predicted.x);
+});

@@ -17,7 +17,8 @@
     const pitch=grating.pitch ?? saved.pitch ?? null;
     const sadp=project.sadpByDesign?.[project.cjob.fingerprint] ?? Boolean(project.cjob.model.sadpDocumented);
     const factor=sadp?0.5:1;
-    return {...grating,pitch,width:grating.width ?? known?.width ?? saved.width ?? null,height:grating.height ?? known?.height ?? saved.height ?? null,
+    const flipped=Boolean(project.designRotationByDesign?.[project.cjob.fingerprint]);
+    return {...grating,x:flipped?-grating.x:grating.x,y:flipped?-grating.y:grating.y,pitch,width:grating.width ?? known?.width ?? saved.width ?? null,height:grating.height ?? known?.height ?? saved.height ?? null,
       effectivePitch:pitch ? pitch*factor : saved.effectivePitch ?? null,orientation:grating.orientation ?? saved.orientation ?? null,
       dose:grating.dose ?? project.cjobDoseOverrides?.[project.cjob.fingerprint]?.[spotId] ?? null};
   }
@@ -88,7 +89,8 @@
       const windowIndex=model.windows.indexOf(mask);
       const shapes=[],rows=new Map();
       for(const [gratingIndex,sourceGrating] of mask.gratings.entries()){
-        const grating=resolvedGrating(sourceGrating,project,sourceGrating.spotBaseId||`w${windowIndex}:g${gratingIndex}`);
+        const oriented=resolvedGrating(sourceGrating,project,sourceGrating.spotBaseId||`w${windowIndex}:g${gratingIndex}`);
+        const grating=(project.mirrorYByDesign?.[project.cjob.fingerprint]??true)?window.CjobModel.predictedGrating(oriented):oriented;
         if(!grating.width||!grating.height)missingSizes=true;if(!grating.effectivePitch)missingPitch=true;if(!grating.orientation)missingOrientation=true;
         const spotId=kind=>`${grating.spotBaseId||`w${windowIndex}:g${gratingIndex}`}:${kind}`;
         const pitch=grating.effectivePitch,order=wavelength&&gap&&pitch&&grating.orientation?window.CjobModel.displacement(wavelength,gap,pitch):null;
@@ -109,6 +111,7 @@
     }
     paintSpots();
     const messages=['Positions are relative to each window (x right, y up). The first-order outlines are ideal translated grating footprints at normal incidence; diffraction broadening is not modelled.','Without units, wavelength is in nm and gap is in µm.',...allMessages];
+    if(project.mirrorYByDesign?.[project.cjob.fingerprint]??true)messages.unshift('Predicted wafer positions are mirrored across the y-axis relative to the mask design.');
     if(groups.size===1&&model.windows.length>1)messages.unshift(`The ${model.windows.map(w=>w.name).join(' and ')} windows have the same grating geometry; the shared layout is shown once.`);
     if(project.sadpByDesign?.[project.cjob.fingerprint] ?? Boolean(model.sadpDocumented))messages.push('SADP is enabled: diffraction uses half the designed pitch.');
     if(knownGeometry[project.cjob.fingerprint])messages.push(`Grating dimensions: ${knownGeometry[project.cjob.fingerprint].source}.`);
@@ -164,7 +167,8 @@
     for(const mask of windows)for(const [index,raw] of mask.gratings.entries()){
       const id=raw.spotBaseId||`w${model.windows.indexOf(mask)}:g${index}`,g=resolvedGrating(raw,project,id),offset=windows.length>1,known=knownGeometry[project.cjob.fingerprint];
       const editableFields=[];if(raw.pitch==null)editableFields.push('pitch');if(raw.width==null&&!known?.width)editableFields.push('width');if(raw.height==null&&!known?.height)editableFields.push('height');if(raw.dose==null)editableFields.push('dose');
-      rows.push({id,pattern:raw.name,editableFields,pitch:g.pitch??'',x:g.x+(offset?mask.x-origin.x:0),y:g.y+(offset?mask.y-origin.y:0),width:g.width??'',height:g.height??'',dose:g.dose??''});
+      const direction=project.designRotationByDesign?.[project.cjob.fingerprint]?-1:1;
+      rows.push({id,pattern:raw.name,editableFields,pitch:g.pitch??'',x:g.x+(offset?direction*(mask.x-origin.x):0),y:g.y+(offset?direction*(mask.y-origin.y):0),width:g.width??'',height:g.height??'',dose:g.dose??''});
     }
     return rows;
   }

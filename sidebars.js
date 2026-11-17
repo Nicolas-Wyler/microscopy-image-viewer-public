@@ -197,40 +197,42 @@ window.createRectangleList = function ({ ordered, onSelect, onEdit, onPreview, g
   const exportStatus = document.getElementById('rectangle-export-status');
   const importButton = document.getElementById('import-rectangles');
   const fileInput = document.getElementById('rectangle-csv-file');
-  importButton.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    importButton.disabled = true;
-    try {
-      const text=await file.text();
-      if(window.OM10_DATA.importedProject && window.ViewerLegacyImport.recognizes(text)){
-        const parsed=await window.ViewerLegacyImport.prepare(text,window.OM10_DATA,(n,total)=>{exportStatus.textContent=`Checking TIFF checksums ${n} / ${total}…`;});
-        const result=onImportLegacy(parsed.groups),parts=[`Imported ${result.imported} rectangles for ${parsed.matched} verified images.`];
-        if(result.conflicts)parts.push(`${result.conflicts} existing rectangles kept.`);
-        if(parsed.missing.length)parts.push(`${parsed.missing.length} source images not loaded.`);
-        if(parsed.mismatch.length)parts.push(`${parsed.mismatch.length} image checksums did not match.`);
-        if(parsed.ambiguous.length)parts.push(`${parsed.ambiguous.length} filenames are ambiguous.`);
-        if(parsed.unmatchedSpots)parts.push(`${parsed.unmatchedSpots} spots did not match the mask; check SADP and geometry.`);
-        exportStatus.textContent=parts.join(' ');return;
+  if (importButton && fileInput) {
+    importButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      importButton.disabled = true;
+      try {
+        const text=await file.text();
+        if(window.OM10_DATA.importedProject && window.ViewerLegacyImport.recognizes(text)){
+          const parsed=await window.ViewerLegacyImport.prepare(text,window.OM10_DATA,(n,total)=>{exportStatus.textContent=`Checking TIFF checksums ${n} / ${total}…`;});
+          const result=onImportLegacy(parsed.groups),parts=[`Imported ${result.imported} rectangles for ${parsed.matched} verified images.`];
+          if(result.conflicts)parts.push(`${result.conflicts} existing rectangles kept.`);
+          if(parsed.missing.length)parts.push(`${parsed.missing.length} source images not loaded.`);
+          if(parsed.mismatch.length)parts.push(`${parsed.mismatch.length} image checksums did not match.`);
+          if(parsed.ambiguous.length)parts.push(`${parsed.ambiguous.length} filenames are ambiguous.`);
+          if(parsed.unmatchedSpots)parts.push(`${parsed.unmatchedSpots} spots did not match the mask; check SADP and geometry.`);
+          exportStatus.textContent=parts.join(' ');return;
+        }
+        const parsed = window.readRectangleCsv(text, window.OM10_DATA, ordered);
+        if (parsed.emptyProject) {
+          exportStatus.textContent = 'The imported project contains no rectangles or comparisons.';
+          return;
+        }
+        onImport(parsed);
+        const groups = [...parsed.groupsBySide.values()];
+        const count = groups.reduce((sum, sideGroups) => sum + [...sideGroups.values()].reduce((n, items) => n + items.size, 0), 0);
+        const slots = groups.reduce((sum, sideGroups) => sum + sideGroups.size, 0);
+        const comparisons = [...parsed.comparisonsBySide.values()].reduce((sum, rows) => sum + rows.length, 0);
+        exportStatus.textContent = `Imported ${count} rectangle${count === 1 ? '' : 's'}${comparisons ? ' and '+comparisons+' comparison'+(comparisons === 1 ? '' : 's') : ''} for ${slots} picture slot${slots === 1 ? '' : 's'}.`;
+      } catch (error) {
+        exportStatus.textContent = `Import failed. ${error.message}`;
+      } finally {
+        fileInput.value = ''; importButton.disabled = false;
       }
-      const parsed = window.readRectangleCsv(text, window.OM10_DATA, ordered);
-      if (parsed.emptyProject) {
-        exportStatus.textContent = 'The imported project contains no rectangles or comparisons.';
-        return;
-      }
-      onImport(parsed);
-      const groups = [...parsed.groupsBySide.values()];
-      const count = groups.reduce((sum, sideGroups) => sum + [...sideGroups.values()].reduce((n, items) => n + items.size, 0), 0);
-      const slots = groups.reduce((sum, sideGroups) => sum + sideGroups.size, 0);
-      const comparisons = [...parsed.comparisonsBySide.values()].reduce((sum, rows) => sum + rows.length, 0);
-      exportStatus.textContent = `Imported ${count} rectangle${count === 1 ? '' : 's'}${comparisons ? ' and '+comparisons+' comparison'+(comparisons === 1 ? '' : 's') : ''} for ${slots} picture slot${slots === 1 ? '' : 's'}.`;
-    } catch (error) {
-      exportStatus.textContent = `Import failed. ${error.message}`;
-    } finally {
-      fileInput.value = ''; importButton.disabled = false;
-    }
-  });
+    });
+  }
   for (const [buttonId, all] of [['export-dose', false], ['export-all', true]]) {
     const button = document.getElementById(buttonId);
     button.addEventListener('click', async () => {

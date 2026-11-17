@@ -11,14 +11,14 @@
   let generation=0,busy=true,storageReady=false,savePending=null,saving=false,saveFailed=false;
   const saveStatus=document.getElementById('project-save-status');
   select.disabled=true;selectImages.disabled=true;document.getElementById('project-title').disabled=true;
-  const selection={projectTitle:'New Project 1',mask:'',wavelength:'',gap:'',resist:'',description:'',bulkDose:'',cjob:null,manualDesign:null,manualDraft:null,cjobGeometry:{},cjobDoseOverrides:{},cjobDrafts:{},sadpByDesign:{},innerTogetherByDesign:{},zones:[],selectedZoneId:'',backgrounds:[],selectedBackgroundId:'',images:[],sources:[],summary:{count:0,width:null,height:null}};
+  const selection={projectTitle:'New Project 1',mask:'',wavelength:'',gap:'',resist:'',description:'',bulkDose:'',doseSeriesMultiplier:'1.0',cjob:null,manualDesign:null,manualDraft:null,cjobGeometry:{},cjobDoseOverrides:{},cjobDrafts:{},designRotationByDesign:{},mirrorYByDesign:{},sadpByDesign:{},innerTogetherByDesign:{},zones:[],selectedZoneId:'',backgrounds:[],selectedBackgroundId:'',images:[],sources:[],summary:{count:0,width:null,height:null}};
   const titleInput=document.getElementById('project-title');let titleEdited=false,titleFromFolder=false;
   titleInput.value=selection.projectTitle;
-  const projectFields={mask:document.getElementById('project-mask'),wavelength:document.getElementById('project-wavelength'),gap:document.getElementById('project-gap'),resist:document.getElementById('project-resist'),bulkDose:document.getElementById('project-dose'),description:document.getElementById('project-description')};
+  const projectFields={mask:document.getElementById('project-mask'),wavelength:document.getElementById('project-wavelength'),gap:document.getElementById('project-gap'),resist:document.getElementById('project-resist'),bulkDose:document.getElementById('project-dose'),doseSeriesMultiplier:document.getElementById('dose-series-multiplier'),description:document.getElementById('project-description')};
   function resizeDescription(){const field=projectFields.description;field.style.height='auto';field.style.height=`${field.scrollHeight+field.offsetHeight-field.clientHeight}px`;}
   for(const [name,field] of Object.entries(projectFields)) {
     field.disabled=true;
-    field.addEventListener('input',()=>{selection[name]=field.value;if(name==='description')resizeDescription();if(name==='bulkDose')updateDoseUi();scheduleSave();});
+    field.addEventListener('input',()=>{selection[name]=field.value;if(name==='description')resizeDescription();if(name==='bulkDose'||name==='doseSeriesMultiplier')updateDoseUi();scheduleSave();});
   }
   titleInput.addEventListener('input',event=>{titleEdited=true;selection.projectTitle=event.target.value;scheduleSave();});
   window.microscopyFolderLoader={getSelection:()=>selection};
@@ -37,9 +37,9 @@
     warning.textContent='Some images were added without a sidecar folder. Missing metadata may make later analysis less convenient.';
     scheduleSave();
   }
-  const doseApply=document.getElementById('dose-apply');
-  function updateDoseUi(){const field=projectFields.bulkDose;doseApply.disabled=!storageReady||!window.ImageTable.getSelectedIds().length||!field.value.trim()||!field.validity.valid||!Number.isFinite(Number(field.value));}
-  doseApply.addEventListener('click',()=>{if(!doseApply.disabled)window.ImageTable.assignDose(window.ImageTable.getSelectedIds(),projectFields.bulkDose.value);});
+  const doseApply=document.getElementById('dose-apply'),seriesError=document.getElementById('dose-series-error');
+  function updateDoseUi(){const field=projectFields.bulkDose,multiplier=projectFields.doseSeriesMultiplier;doseApply.disabled=!storageReady||!window.ImageTable.getSelectedIds().length||!field.value.trim()||!field.validity.valid||!Number.isFinite(Number(field.value))||!multiplier.value.trim()||!multiplier.validity.valid||!Number.isFinite(Number(multiplier.value));seriesError.textContent='';}
+  doseApply.addEventListener('click',()=>{if(doseApply.disabled)return;try{const ids=window.ImageTable.getSelectedIds(),factor=Number(projectFields.doseSeriesMultiplier.value);if(factor===1)window.ImageTable.assignDose(ids,projectFields.bulkDose.value);else window.ImageTable.assignDoseSeries(ids,Number(projectFields.bulkDose.value),factor);seriesError.textContent='';}catch(error){seriesError.textContent=error.message||'Could not apply dose series.';}});
   const bgSelect=document.getElementById('background-selector'),bgInput=document.getElementById('background-input'),bgName=document.getElementById('background-rename-input'),bgStatus=document.getElementById('background-status');
   const bgView=document.getElementById('background-view'),bgApply=document.getElementById('background-apply'),bgRename=document.getElementById('background-rename'),bgRemove=document.getElementById('background-remove');
   function updateBackgroundUi() {
@@ -79,8 +79,8 @@
     window.ImageTable.mutateProject(state=>{selection.zones=selection.zones.filter(zone=>zone.id!==id);selection.selectedZoneId='';for(const item of state.items())if(item.zoneId===id)state.setZone(item.id,'');updateZoneUi();});
   });
   const tableOptions={onUpdate:syncSelection,getBackgrounds:()=>selection.backgrounds,getZones:()=>selection.zones,getCurrentCjob:()=>activeDesign()?.id ?? null,
-    getExtras:()=>({backgrounds:selection.backgrounds.map(background=>({...background})),selectedBackgroundId:selection.selectedBackgroundId,zones:selection.zones.map(zone=>({...zone,spotIds:[...zone.spotIds],spotGroups:zone.spotGroups?.map(group=>[...group])})),selectedZoneId:selection.selectedZoneId,cjobGeometry:structuredClone(selection.cjobGeometry),cjobDoseOverrides:structuredClone(selection.cjobDoseOverrides),cjobDrafts:structuredClone(selection.cjobDrafts),sadpByDesign:structuredClone(selection.sadpByDesign),innerTogetherByDesign:structuredClone(selection.innerTogetherByDesign),cjob:selection.cjob,manualDesign:selection.manualDesign,manualDraft:structuredClone(selection.manualDraft)}),
-    restoreExtras:extra=>{if(!extra)return;selection.backgrounds=extra.backgrounds.map(background=>({...background}));selection.selectedBackgroundId=extra.selectedBackgroundId;selection.zones=(extra.zones||[]).map(zone=>({...zone,spotIds:[...zone.spotIds],spotGroups:zone.spotGroups?.map(group=>[...group])}));selection.selectedZoneId=extra.selectedZoneId||'';selection.cjobGeometry=structuredClone(extra.cjobGeometry||{});selection.cjobDoseOverrides=structuredClone(extra.cjobDoseOverrides||{});selection.cjobDrafts=structuredClone(extra.cjobDrafts||{});selection.sadpByDesign=structuredClone(extra.sadpByDesign||{});selection.innerTogetherByDesign=structuredClone(extra.innerTogetherByDesign||{});selection.cjob=extra.cjob||null;selection.manualDesign=extra.manualDesign||null;selection.manualDraft=structuredClone(extra.manualDraft||null);updateBackgroundUi();updateZoneUi();window.CjobView.refreshUi();},
+    getExtras:()=>({backgrounds:selection.backgrounds.map(background=>({...background})),selectedBackgroundId:selection.selectedBackgroundId,zones:selection.zones.map(zone=>({...zone,spotIds:[...zone.spotIds],spotGroups:zone.spotGroups?.map(group=>[...group])})),selectedZoneId:selection.selectedZoneId,cjobGeometry:structuredClone(selection.cjobGeometry),cjobDoseOverrides:structuredClone(selection.cjobDoseOverrides),cjobDrafts:structuredClone(selection.cjobDrafts),designRotationByDesign:structuredClone(selection.designRotationByDesign),mirrorYByDesign:structuredClone(selection.mirrorYByDesign),sadpByDesign:structuredClone(selection.sadpByDesign),innerTogetherByDesign:structuredClone(selection.innerTogetherByDesign),cjob:selection.cjob,manualDesign:selection.manualDesign,manualDraft:structuredClone(selection.manualDraft)}),
+    restoreExtras:extra=>{if(!extra)return;selection.backgrounds=extra.backgrounds.map(background=>({...background}));selection.selectedBackgroundId=extra.selectedBackgroundId;selection.zones=(extra.zones||[]).map(zone=>({...zone,spotIds:[...zone.spotIds],spotGroups:zone.spotGroups?.map(group=>[...group])}));selection.selectedZoneId=extra.selectedZoneId||'';selection.cjobGeometry=structuredClone(extra.cjobGeometry||{});selection.cjobDoseOverrides=structuredClone(extra.cjobDoseOverrides||{});selection.cjobDrafts=structuredClone(extra.cjobDrafts||{});selection.designRotationByDesign=structuredClone(extra.designRotationByDesign||{});selection.mirrorYByDesign=structuredClone(extra.mirrorYByDesign||{});selection.sadpByDesign=structuredClone(extra.sadpByDesign||{});selection.innerTogetherByDesign=structuredClone(extra.innerTogetherByDesign||{});selection.cjob=extra.cjob||null;selection.manualDesign=extra.manualDesign||null;selection.manualDraft=structuredClone(extra.manualDraft||null);updateBackgroundUi();updateZoneUi();window.CjobView.refreshUi();},
     onSelectionChange:()=>{updateBackgroundUi();updateZoneUi();updateDoseUi();}};
   window.ImageTable.start([],tableOptions);
   window.MaskDesignEditor?.configure({
@@ -91,16 +91,20 @@
     getImportedDraft:()=>selection.cjobDrafts[selection.cjob?.fingerprint],
     onImportedDraft:draft=>{selection.cjobDrafts[selection.cjob.fingerprint]=draft;scheduleSave();},
     prepareGeometry:()=>window.CjobView.prepareGeometry(),
+    getRotation:()=>Boolean(selection.cjob&&selection.designRotationByDesign[selection.cjob.fingerprint]),
+    setRotation:value=>{if(selection.cjob)window.ImageTable.mutateProject(()=>{selection.designRotationByDesign[selection.cjob.fingerprint]=value;window.CjobView.refreshUi();});},
+    getMirrorY:()=>{const design=activeDesign();return design ? (selection.mirrorYByDesign[design.fingerprint] ?? true) : true;},
+    setMirrorY:value=>{const design=activeDesign();if(design)window.ImageTable.mutateProject(()=>{selection.mirrorYByDesign[design.fingerprint]=value;window.CjobView.refreshUi();});},
     getSadp:()=>{const design=activeDesign();return design?(selection.sadpByDesign[design.fingerprint] ?? Boolean(design.model?.sadpDocumented)):false;},
     setSadp:value=>{const design=activeDesign();if(design)window.ImageTable.mutateProject(()=>{selection.sadpByDesign[design.fingerprint]=value;window.CjobView.refreshUi();});},
     onSaveImported:rows=>window.ImageTable.mutateProject(()=>{const key=selection.cjob.fingerprint,geometry=structuredClone(selection.cjobGeometry[key]||{}),doses={...(selection.cjobDoseOverrides[key]||{})};for(const row of rows){for(const field of row.editableFields){const value=String(row[field]??'').trim(),number=value===''?null:Number(value);if(field==='dose'){if(number===null)delete doses[row.id];else doses[row.id]=number;}else{geometry[row.pattern]??={};geometry[row.pattern][field]=number;}}}selection.cjobGeometry[key]=geometry;selection.cjobDoseOverrides[key]=doses;delete selection.cjobDrafts[key];window.CjobView.refreshUi();}),
     onDraft:draft=>{selection.manualDraft=draft;scheduleSave();},
     onRemoveCjob:()=>window.ImageTable.mutateProject(()=>{selection.cjob=null;selection.selectedZoneId='';updateZoneUi();window.CjobView.refreshUi();}),
-    onSave:(name,rows,sadp)=>window.ImageTable.mutateProject(state=>{
+    onSave:(name,rows,sadp,mirrorY)=>window.ImageTable.mutateProject(state=>{
       const old=selection.manualDesign,id=old?.id||'manual-'+crypto.randomUUID(),fingerprint=old?.fingerprint||'manual:'+crypto.randomUUID();
       const gratings=rows.map(row=>({name:'manual-'+row.id,pitch:Number(row.pitch),effectivePitch:Number(row.pitch),orientation:'vertical',x:Number(row.x),y:Number(row.y),width:Number(row.width),height:Number(row.height),dose:row.dose===''?null:Number(row.dose),spotBaseId:row.id}));
       selection.manualDesign={id,fingerprint,name,manual:true,model:{windows:[{name:'Mask',x:0,y:0,gratings}],warnings:[]}};
-      selection.manualDraft=null;selection.sadpByDesign[fingerprint]=sadp;
+      selection.manualDraft=null;selection.sadpByDesign[fingerprint]=sadp;selection.mirrorYByDesign[fingerprint]=mirrorY;
       const available=new Set(gratings.map(g=>g.spotBaseId));
       for(const zone of selection.zones)if(zone.cjobId===id){zone.spotIds=zone.spotIds.filter(spot=>available.has(spot.slice(0,spot.lastIndexOf(':'))));const retained=new Set(zone.spotIds);if(zone.spotGroups)zone.spotGroups=zone.spotGroups.map(group=>group.filter(spot=>retained.has(spot))).filter(group=>group.length);}
       updateZoneUi();window.CjobView.refreshUi();
@@ -163,7 +167,7 @@
     const backgrounds=selection.backgrounds.map(bg=>{const assetKey='background:'+bg.id;assets.set(assetKey,bg.file);return {id:bg.id,name:bg.name,assetKey};});
     const cjob=selection.cjob ? {id:selection.cjob.id,name:selection.cjob.name,assetKey:'cjob:'+selection.cjob.id} : null;
     if(cjob)assets.set(cjob.assetKey,selection.cjob.file);
-    return {project:{cjob,projectTitle:selection.projectTitle,mask:selection.mask,wavelength:selection.wavelength,gap:selection.gap,resist:selection.resist,description:selection.description,bulkDose:selection.bulkDose,titleEdited,titleFromFolder,images,sources,backgrounds,selectedBackgroundId:selection.selectedBackgroundId,zones:selection.zones,selectedZoneId:selection.selectedZoneId,cjobGeometry:selection.cjobGeometry,cjobDoseOverrides:selection.cjobDoseOverrides,cjobDrafts:selection.cjobDrafts,sadpByDesign:selection.sadpByDesign,innerTogetherByDesign:selection.innerTogetherByDesign,manualDesign:selection.manualDesign,manualDraft:selection.manualDraft},assets};
+    return {project:{cjob,projectTitle:selection.projectTitle,mask:selection.mask,wavelength:selection.wavelength,gap:selection.gap,resist:selection.resist,description:selection.description,bulkDose:selection.bulkDose,doseSeriesMultiplier:selection.doseSeriesMultiplier,titleEdited,titleFromFolder,images,sources,backgrounds,selectedBackgroundId:selection.selectedBackgroundId,zones:selection.zones,selectedZoneId:selection.selectedZoneId,cjobGeometry:selection.cjobGeometry,cjobDoseOverrides:selection.cjobDoseOverrides,cjobDrafts:selection.cjobDrafts,designRotationByDesign:selection.designRotationByDesign,mirrorYByDesign:selection.mirrorYByDesign,sadpByDesign:selection.sadpByDesign,innerTogetherByDesign:selection.innerTogetherByDesign,manualDesign:selection.manualDesign,manualDraft:selection.manualDraft},assets};
   }
   async function drainSaves() {
     if(saving || !storageReady)return;
@@ -187,11 +191,11 @@
       if(saved){
         const {project,assets}=saved;
         selection.projectTitle=project.projectTitle;titleInput.value=selection.projectTitle;
-        for(const [name,field] of Object.entries(projectFields)){selection[name]=project[name] ?? '';field.value=selection[name];}
+        for(const [name,field] of Object.entries(projectFields)){selection[name]=project[name] ?? (name==='doseSeriesMultiplier'?'1.0':'');field.value=selection[name];}
         titleEdited=Boolean(project.titleEdited);titleFromFolder=Boolean(project.titleFromFolder);
         selection.backgrounds=(project.backgrounds||[]).map(bg=>({id:bg.id,name:bg.name,file:assets.get(bg.assetKey)}));
         selection.selectedBackgroundId=project.selectedBackgroundId || '';
-        selection.zones=project.zones||[];selection.selectedZoneId=project.selectedZoneId||'';selection.cjobGeometry=project.cjobGeometry||{};selection.cjobDoseOverrides=project.cjobDoseOverrides||{};selection.cjobDrafts=project.cjobDrafts||{};selection.sadpByDesign=project.sadpByDesign||{};selection.innerTogetherByDesign=project.innerTogetherByDesign||{};selection.manualDesign=project.manualDesign||null;selection.manualDraft=project.manualDraft||null;
+        selection.zones=project.zones||[];selection.selectedZoneId=project.selectedZoneId||'';selection.cjobGeometry=project.cjobGeometry||{};selection.cjobDoseOverrides=project.cjobDoseOverrides||{};selection.cjobDrafts=project.cjobDrafts||{};selection.designRotationByDesign=project.designRotationByDesign||{};selection.mirrorYByDesign=project.mirrorYByDesign||{};selection.sadpByDesign=project.sadpByDesign||{};selection.innerTogetherByDesign=project.innerTogetherByDesign||{};selection.manualDesign=project.manualDesign||null;selection.manualDraft=project.manualDraft||null;
         if(project.cjob){const file=assets.get(project.cjob.assetKey);selection.cjob=await window.CjobView.restore(project.cjob,file);}
         const sourceById=new Map();
         for(const source of project.sources){
@@ -213,7 +217,7 @@
     }
   }
   const newProjectButton=document.getElementById('new-project'),previousProjectButton=document.getElementById('previous-project');
-  const emptyProject=()=>({projectTitle:'New Project 1',mask:'',wavelength:'',gap:'',resist:'',description:'',bulkDose:'',titleEdited:false,titleFromFolder:false,cjob:null,manualDesign:null,manualDraft:null,cjobGeometry:{},cjobDoseOverrides:{},cjobDrafts:{},sadpByDesign:{},innerTogetherByDesign:{},zones:[],selectedZoneId:'',backgrounds:[],selectedBackgroundId:'',images:[],sources:[]});
+  const emptyProject=()=>({projectTitle:'New Project 1',mask:'',wavelength:'',gap:'',resist:'',description:'',bulkDose:'',doseSeriesMultiplier:'1.0',titleEdited:false,titleFromFolder:false,cjob:null,manualDesign:null,manualDraft:null,cjobGeometry:{},cjobDoseOverrides:{},cjobDrafts:{},designRotationByDesign:{},mirrorYByDesign:{},sadpByDesign:{},innerTogetherByDesign:{},zones:[],selectedZoneId:'',backgrounds:[],selectedBackgroundId:'',images:[],sources:[]});
   async function updateProjectSwitchUi(){previousProjectButton.hidden=!(await window.TableProjectStore.hasPrevious());newProjectButton.disabled=!storageReady;previousProjectButton.disabled=!storageReady;}
   async function switchProject(previous){
     if(!storageReady||busy)return;busy=true;newProjectButton.disabled=true;previousProjectButton.disabled=true;

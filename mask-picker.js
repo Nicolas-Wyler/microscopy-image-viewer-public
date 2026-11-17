@@ -46,9 +46,9 @@ window.createMaskPicker = function (viewport, frameElement, overview, getFrame, 
   function openImported(source) {
     const frame=getFrame(),entry=frame?.entry;if(!frame)return false;
     if(!window.OM10_DATA.maskDesign){if(feedback)feedback.textContent='No mask design is available for spot placement.';return false;}
-    if(!entry.hasCalibration||!entry.alignment){if(feedback)feedback.textContent=entry.alignmentError||'A sidecar pixel size and rough alignment are needed before placing spots.';return false;}
-    const candidates=overview.spots.filter(spot=>!overview.exists(spot.id)).map(spot=>({spot,result:window.ViewerSpotPlacement.placement(entry,spot.group)})).filter(item=>item.result.rect);
-    if(!candidates.length){if(feedback)feedback.textContent='No unplaced spots with usable geometry are visible for this image and zone.';return false;}
+    if(!entry.hasCalibration){if(feedback)feedback.textContent='A sidecar pixel size is needed before placing spots.';return false;}
+    const candidates=overview.spots.filter(spot=>!overview.exists(spot.id)).map(spot=>({spot,result:overview.placement(spot)})).filter(item=>item.result.rect&&!item.result.manual);
+    if(!candidates.length){if(feedback)feedback.textContent=entry.alignment?'No unplaced spots with usable geometry are visible for this image and zone.':'Use an Expected spots button to add a rectangle, then drag it into position.';return false;}
     close();duplicateSource=source;if(source&&feedback){priorFeedback=feedback.textContent;feedback.textContent=duplicatePrompt;}
     overlay=svg('svg',{viewBox:'0 0 '+frame.width+' '+frame.height,'aria-label':source?'Choose an empty spot for the duplicate':'Expected spot picker'},frameElement);
     overlay.style.cssText='position:absolute;inset:0;width:100%;height:100%;cursor:default';

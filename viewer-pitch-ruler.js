@@ -4,7 +4,7 @@
   const root=document.getElementById('pitch-ruler'),legacy=window.renderPitchRuler,ns='http://www.w3.org/2000/svg';
   window.renderPitchRuler=(viewport,frame,scale,dx,dy)=>{
     const data=window.OM10_DATA,entry=frame.entry;if(!data.importedProject)return legacy(viewport,frame,scale,dx,dy);
-    root.replaceChildren();if(!data.maskDesign||!entry.alignment||!entry.hasCalibration)return;
+    root.replaceChildren();if(!data.maskDesign||!entry.alignment||entry.alignment.translationSource==='centered'||!entry.hasCalibration)return;
     const doses=new Map();for(const spot of data.maskDesign.spots.values()){const g=spot.grating,p=g.effectivePitch??g.pitch;if(!Number.isFinite(p)||!Number.isFinite(g.dose))continue;if(!doses.has(p))doses.set(p,new Set());doses.get(p).add(g.dose);}
     const grates=new Map();for(const group of window.ViewerMask.forImage(data.maskDesign,entry).groups)for(const spot of group.spots)grates.set(spot.grating.id,spot.grating);
     const rows=[];for(const g of grates.values()){
