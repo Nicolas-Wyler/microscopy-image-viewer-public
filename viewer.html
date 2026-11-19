@@ -7,7 +7,7 @@
   <meta name="description" content="Local microscopy image viewer.">
   <title>Image viewer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23d8eb87'/%3E%3Cpath d='M11 11h7v7h-7zm11 0h7v7h-7zm-11 11h7v7h-7zm11 0h7v7h-7z' fill='%23171b1d'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=recent-states-1">
+  <link rel="stylesheet" href="styles.css?v=single-state-1">
   <script defer src="viewer-placeholder-data.js"></script>
   <script defer src="table-project-store.js"></script>
   <script defer src="vendor/pako-inflate.min.js"></script>
@@ -42,9 +42,10 @@
   <script defer src="viewer-legacy-import.js"></script>
   <script defer src="viewer-state.js"></script>
   <script>if (location.protocol === "file:") document.write('<script defer src="recent-state-index.local.js"><\/script>');</script>
-  <script defer src="viewer-state-ui.js?v=recent-states-1"></script>
+  <script defer src="viewer-file-targets.js?v=single-state-1"></script>
+  <script defer src="viewer-state-ui.js?v=single-state-1"></script>
   <script defer src="viewer-positions-export.js"></script>
-  <script defer src="viewer-positions-ui.js?v=region-1"></script>
+  <script defer src="viewer-positions-ui.js?v=single-state-1"></script>
   <script defer src="sidebars.js?v=om13-inner-pair-3"></script>
   <script defer src="edge-filters.js?v=1.0.6-om13"></script>
   <script defer src="edge-views.js?v=1.0.6-om13"></script>
@@ -275,6 +276,10 @@
       </section>
       <footer class="rectangle-export">
         <p id="viewer-file-status" role="status"></p>
+        <div class="file-target-fields">
+          <label>State file<input id="state-file-path" type="text" placeholder="Choose a state file" autocomplete="off" spellcheck="false" title="File name, or a path relative to the selected folder"></label>
+          <label>Positions file<input id="positions-file-path" type="text" placeholder="Choose an export file" autocomplete="off" spellcheck="false" title="File name, or a path relative to the selected folder"></label>
+        </div>
         <div class="rectangle-export-controls">
           <button id="save-viewer-state" type="button">Save State</button>
           <div class="state-load-menu-wrap">
