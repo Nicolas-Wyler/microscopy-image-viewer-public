@@ -4,7 +4,20 @@ function fixture(values,{bits=16,little=true,channels=1,orientation=1,width=2,he
 for(const little of [true,false])test(`reads original 16-bit grayscale samples (${little?'little':'big'} endian)`,async()=>{const image=await scope.window.TiffImage.values(fixture([0,257,4097,65535],{little}));assert.deepEqual(Array.from(image.values),[0,257,4097,65535]);assert.equal(image.bitsPerSample,16);});
 test('keeps original 8-bit samples unchanged',async()=>{const image=await scope.window.TiffImage.values(fixture([0,7,128,255],{bits:8}));assert.deepEqual(Array.from(image.values),[0,7,128,255]);assert.equal(image.bitsPerSample,8);});
 
+test('negative inverts native samples and display while preserving source and alpha',async()=>{
+ const api=scope.window.TiffImage,file=fixture([0,257,4097,65535],{bits:16});
+ api.setNegative(true);const neg=await api.values(file),display=await api.decode(file);
+ assert.deepEqual(Array.from(neg.values),[65535,65278,61438,0]);assert.equal(display.rgba[3],255);assert.equal(display.rgba[0],255);
+ api.setNegative(false);assert.deepEqual(Array.from((await api.values(file)).values),[0,257,4097,65535]);
+});
+
 test('averages original 16-bit RGB channels without reducing bit depth',async()=>{const image=await scope.window.TiffImage.values(fixture([300,600,900,1000,2000,3000,99,99,99,65000,65000,65000],{channels:3}));assert.deepEqual(Array.from(image.values),[600,2000,99,65000]);assert.equal(image.bitsPerSample,16);});
+
+test('samples a region from native TIFF pixels',async()=>{
+ scope.window.ViewerBackgroundValues=require('../viewer-background-values.js');
+ const result=await scope.window.TiffImage.sampleRegion(fixture([300,600,900,1000,2000,3000,99,99,99,65000,65000,65000],{channels:3}),[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}]);
+ assert.equal(result.mean,600);assert.equal(result.bitsPerSample,16);assert.equal(result.count,1);
+});
 
 test('honors TIFF orientation in both native and display pixels',async()=>{
  const expected={1:[10,20,30,40],2:[20,10,40,30],3:[40,30,20,10],4:[30,40,10,20],5:[10,30,20,40],6:[30,10,40,20],7:[40,20,30,10],8:[20,40,10,30]};

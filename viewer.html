@@ -7,32 +7,32 @@
   <meta name="description" content="Local microscopy image viewer.">
   <title>Image viewer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23d8eb87'/%3E%3Cpath d='M11 11h7v7h-7zm11 0h7v7h-7zm-11 11h7v7h-7zm11 0h7v7h-7z' fill='%23171b1d'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=analysis-mode-fixed-1">
+  <link rel="stylesheet" href="styles.css?v=recent-states-1">
   <script defer src="viewer-placeholder-data.js"></script>
   <script defer src="table-project-store.js"></script>
   <script defer src="vendor/pako-inflate.min.js"></script>
   <script defer src="vendor/utif.js"></script>
-  <script defer src="pixel-worker-source.js?v=1"></script>
-  <script defer src="tiff-image.js?v=pixel-worker-1"></script>
+  <script defer src="pixel-worker-source.js?v=negative-1"></script>
+  <script defer src="tiff-image.js?v=negative-1"></script>
   <script defer src="sidecar-scale.js"></script>
   <script defer src="cjob-model.js?v=wafer-mirror-1"></script>
   <script defer src="spot-grouping.js"></script>
   <script defer src="viewer-mask.js?v=mirror-option-1"></script>
   <script defer src="viewer-geometry-recovery.js?v=geometry-restore-1"></script>
-  <script defer src="viewer-project.js?v=shared-initial-scale-1"></script>
-  <script defer src="viewer-background-values.js"></script>
-  <script defer src="viewer-background.js?v=pixel-worker-1"></script>
-  <script defer src="viewer-histogram.js?v=responsive-1"></script>
+  <script defer src="viewer-project.js?v=negative-1"></script>
+  <script defer src="viewer-background-values.js?v=region-1"></script>
+  <script defer src="viewer-background.js?v=region-1"></script>
+  <script defer src="viewer-histogram.js?v=region-1"></script>
   <script defer src="viewer-registration.js"></script>
   <script defer src="viewer-alignment.js?v=common-frame-1"></script>
-  <script defer src="viewer-recalibration.js?v=shared-calibration-1"></script>
+  <script defer src="viewer-recalibration.js?v=crop-frame-1-shared-calibration-1"></script>
   <script defer src="project-storage.js?v=om13-1"></script>
   <script defer src="viewer-session.js?v=geometry-restore-1"></script>
   <script defer src="workspace-navigation.js"></script>
   <script defer src="popup-drag.js?v=1.0.6-om13"></script>
   <script defer src="viewer-placeholder-mask.js"></script>
-  <script defer src="spot-colors.js?v=om13-inner-pair-2"></script>
-  <script defer src="viewer-spot-placement.js?v=manual-placement-1"></script>
+  <script defer src="spot-colors.js?v=distinct-pairs-1"></script>
+  <script defer src="viewer-spot-placement.js?v=distinct-pairs-1"></script>
   <script defer src="viewer-spot-overview.js?v=manual-placement-1"></script>
   <script defer src="grating-geometry.js?v=om13-inner-pair-2"></script>
   <script defer src="grating-storage.js?v=om13-inner-pair-2"></script>
@@ -41,9 +41,10 @@
   <script defer src="rectangle-import.js?v=om13-integral-1"></script>
   <script defer src="viewer-legacy-import.js"></script>
   <script defer src="viewer-state.js"></script>
-  <script defer src="viewer-state-ui.js?v=geometry-restore-1"></script>
+  <script>if (location.protocol === "file:") document.write('<script defer src="recent-state-index.local.js"><\/script>');</script>
+  <script defer src="viewer-state-ui.js?v=recent-states-1"></script>
   <script defer src="viewer-positions-export.js"></script>
-  <script defer src="viewer-positions-ui.js"></script>
+  <script defer src="viewer-positions-ui.js?v=region-1"></script>
   <script defer src="sidebars.js?v=om13-inner-pair-3"></script>
   <script defer src="edge-filters.js?v=1.0.6-om13"></script>
   <script defer src="edge-views.js?v=1.0.6-om13"></script>
@@ -60,14 +61,14 @@
   <script defer src="integral-export.js?v=om13-1"></script>
   <script defer src="integral-profile.js?v=om13-1"></script>
   <script defer src="rectangle-menu.js?v=om13-integral-1"></script>
-  <script defer src="grating-overlay.js?v=om13-integral-1"></script>
+  <script defer src="grating-overlay.js?v=profile-scale-3"></script>
   <script defer src="viewport-geometry.js?v=1.0.6-om13"></script>
   <script defer src="pitch-ruler.js?v=1.0.6-om13"></script>
   <script defer src="viewer-pitch-ruler.js"></script>
   <script defer src="pixel-grid.js?v=1.0.6-om13"></script>
   <script defer src="mask-picker.js?v=om13-inner-pair-2"></script>
   <script defer src="sidecar-viewer.js?v=1.0.6-om13"></script>
-  <script defer src="app.js?v=responsive-analysis-1"></script>
+  <script defer src="app.js?v=hide-image-colors-crop-1"></script>
   <script id="project-csv" type="application/json" data-project="generic-standalone-cleanup">"csv_version,exposure,mask,source_directory,image,source_sha256,record_type,spot_id,coordinate_view,centre_x_um,centre_y_um,width_um,height_um,rotation_clockwise_deg,colour,euv_dose_mJ_cm2,exposure_field\r\n2,,,,Preview,,empty_image,,,,,,,,,,\r\n"</script>
 </head>
 <body>
@@ -139,6 +140,7 @@
       <button id="filter-parameters-toggle" type="button" aria-controls="filter-parameters" aria-expanded="false">Filter parameters</button>
       <button id="toggle-grayscale" type="button" aria-controls="micrograph" aria-pressed="false" title="Display the micrograph in grayscale">B/W</button>
       <button id="clean-image" type="button" aria-controls="viewport" aria-pressed="false" title="Hide image overlays and lock spot editing. Drag to pan or scroll to zoom.">Clean image</button>
+      <button id="hide-image" type="button" aria-controls="micrograph" aria-pressed="false" title="Hide the micrograph while keeping annotations visible">Hide image</button>
       <button id="show-distances" type="button" aria-pressed="false" aria-controls="distance-guides" title="Show all matching zero-to-first-order distances in this image">
         <svg viewBox="0 0 20 12" aria-hidden="true"><path d="M2 6h16M6 2 2 6l4 4m8-8 4 4-4 4"/></svg>Show distances
       </button>
@@ -147,6 +149,7 @@
       <canvas id="visible-histogram" width="160" height="60" aria-label="Visible pixel intensity histogram" hidden></canvas>
       <svg id="gaussian-radius" aria-label="Gaussian standard deviation radius" hidden><circle fill="none" stroke="#ffe100" stroke-width="2"/></svg>
       <div id="image-frame"><img id="micrograph" alt="" draggable="false" hidden></div>
+      <div id="background-region-picker" hidden><div id="background-region-box" hidden></div><span>Drag to select background · Esc to cancel</span></div>
       <svg id="pitch-ruler" aria-hidden="true"></svg>
       <svg id="pixel-grid" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden><path vector-effect="non-scaling-stroke"/></svg>
       <svg id="canny-midpoints" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden><svg overflow="hidden"><g><path class="canny-contours" fill="#206b49"/><path class="canny-centres" fill="#00b84c"/></g></svg></svg>
@@ -274,7 +277,14 @@
         <p id="viewer-file-status" role="status"></p>
         <div class="rectangle-export-controls">
           <button id="save-viewer-state" type="button">Save State</button>
-          <button id="load-viewer-state" type="button">Load State</button>
+          <div class="state-load-menu-wrap">
+            <button id="load-viewer-state" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="state-load-menu">Load State ▾</button>
+            <div id="state-load-menu" class="state-load-menu" hidden>
+              <button id="state-browse" type="button">Browse…</button>
+              <div class="state-menu-heading">Recent</div>
+              <div id="state-recent-list" class="state-recent-list"></div>
+            </div>
+          </div>
           <input id="viewer-state-file" type="file" accept=".json,application/json" hidden>
           <button id="export-positions" type="button">Export Positions</button>
         </div>
@@ -332,9 +342,10 @@
     <div class="filter-panel-heading" data-popup-drag-handle><h2 id="background-parameters-title">Background parameters</h2><button type="button" id="background-parameters-close" aria-label="Close background parameters">×</button></div>
     <div class="background-parameter-controls">
       <div class="view-toggle" role="group" aria-label="Normalized intensity scale"><button type="button" id="intensity-lin" aria-pressed="true">Lin</button><button type="button" id="intensity-log" aria-pressed="false">Log</button></div>
-      <label class="gaussian-control" for="zero-offset">Zero offset <input id="zero-offset" type="number" value="0" min="0" step="any" required></label>
+      <label class="gaussian-control" for="zero-offset">Zero offset <input id="zero-offset" type="number" value="0" step="any" required></label>
       <label class="gaussian-control" for="background-sigma">Gaussian σ <input id="background-sigma" type="number" value="3" min="0" max="100" step="any" required> px</label>
     </div>
+    <div class="background-region-controls"><button type="button" id="background-select-region">Select background area</button><button type="button" id="background-clear-region">Clear</button><p id="background-region-status" role="status"></p></div>
   </div>
   <dialog id="sidecar-dialog" data-draggable-popup class="sidecar-dialog" aria-labelledby="sidecar-title">
     <div class="sidecar-header" data-popup-drag-handle><h2 id="sidecar-title">Leica sidecar</h2><button id="sidecar-close" type="button" aria-label="Close sidecar">×</button></div>

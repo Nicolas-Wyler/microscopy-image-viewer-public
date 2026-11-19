@@ -41,13 +41,16 @@ window.TiffImage = (() => {
     }
     return {pixels:out,width:outWidth,height:outHeight};
   }
-  async function decode(file) {
+  let negative=false;
+  function setNegative(value){negative=Boolean(value);}
+  async function decode(file,negativeMode=negative) {
     const image = await raw(file), rgba = window.UTIF.toRGBA8(image);
     if (!rgba || rgba.length !== image.width * image.height * 4) throw new Error('TIFF image could not be decoded');
     const result=oriented(new Uint8ClampedArray(rgba),image.width,image.height,4,image.t274?.[0]??1);
+    if(negativeMode)for(let i=0;i<result.pixels.length;i+=4){result.pixels[i]=255-result.pixels[i];result.pixels[i+1]=255-result.pixels[i+1];result.pixels[i+2]=255-result.pixels[i+2];}
     return {width:result.width,height:result.height,rgba:result.pixels};
   }
-  const cache=new Map();
+  const caches=[new Map(),new Map()];
   let worker, workerFailed=false, nextRequest=0;
   const requests=new Map();
   function workerCall(type, payload, transfer=[]) {
@@ -69,11 +72,19 @@ window.TiffImage = (() => {
     try { const copy=values.slice();return await workerCall('blur',{values:copy,width,height,sigma},[copy.buffer]); }
     catch(_){return window.ViewerBackgroundValues.blur(values,width,height,sigma);}
   }
-  async function values(file) {
+  async function sampleRegion(file,polygon,negativeMode=negative){
+    if(!window.__tiffWorkerContext&&!workerFailed&&typeof Worker!=='undefined'){
+      try{return await workerCall('sampleRegion',{file,polygon,negative:negativeMode});}catch(error){if(!workerFailed)throw error;}
+    }
+    const image=await values(file,negativeMode),sample=window.ViewerBackgroundValues.sampleRegion(image,polygon);
+    return {...sample,bitsPerSample:image.bitsPerSample,photometric:image.photometric,negative:negativeMode};
+  }
+  async function values(file,negativeMode=negative) {
+    const cache=caches[negativeMode?1:0];
     if(cache.has(file)){const value=cache.get(file);cache.delete(file);cache.set(file,value);return value;}
     const task=(async()=>{
       if(!window.__tiffWorkerContext && !workerFailed && typeof Worker!=='undefined') {
-        try { return await workerCall('values',{file}); }
+        try { return await workerCall('values',{file,negative:negativeMode}); }
         catch(error) { if(!workerFailed) throw error; }
       }
       const image=await raw(file), bits=image.t258?.[0]??1, format=image.t339?.[0]??1, photo=image.t262?.[0]??1, channels=image.t277?.[0]??1, compression=image.t259?.[0]??1;
@@ -81,10 +92,10 @@ window.TiffImage = (() => {
       const bytes=bits/8, count=image.width*image.height;if(image.data.length<count*channels*bytes)throw new Error('TIFF pixel data is incomplete.');
       const view=new DataView(image.data.buffer,image.data.byteOffset,image.data.byteLength), output=new Float32Array(count), max=bits===8?255:65535;
       const read=i=>bits===8?view.getUint8(i):view.getUint16(i,true); // UTIF swaps 16-bit big-endian data to little-endian.
-      for(let i=0;i<count;i++){const at=i*channels*bytes;if(channels===4&&read(at+3*bytes)!==max){output[i]=NaN;continue;}output[i]=channels===1?read(at):(read(at)+read(at+bytes)+read(at+2*bytes))/3;}
+      for(let i=0;i<count;i++){const at=i*channels*bytes;if(channels===4&&read(at+3*bytes)!==max){output[i]=NaN;continue;}const value=channels===1?read(at):(read(at)+read(at+bytes)+read(at+2*bytes))/3;output[i]=negativeMode?max-value:value;}
       const result=oriented(output,image.width,image.height,1,image.t274?.[0]??1);
       return {width:result.width,height:result.height,values:result.pixels,bitsPerSample:bits,sampleFormat:'unsigned integer',photometric:photo,channels,max};
     })().catch(error=>{cache.delete(file);throw error;});cache.set(file,task);while(cache.size>2)cache.delete(cache.keys().next().value);return task;
   }
-  return {decode,values,blur,clearCache:()=>cache.clear()};
+  return {decode,values,blur,sampleRegion,setNegative,clearCache:()=>caches.forEach(cache=>cache.clear())};
 })();

@@ -45,5 +45,15 @@
     }
     return {images:result,alignedPixelUm:ref,cropWidth,cropHeight};
   }
-  return {fit,fitShared,plan,centered};
+  // Change only the crop frame: preserve the physical transform and move its
+  // origin by the corresponding pixel offset. Shared for restored calibrations.
+  function reframe(frame,bounds,pixel) {
+    if(!frame?.matrix || !bounds || !(pixel>0))return frame;
+    const width=Math.max(1,Math.ceil(2*(bounds.maxX+bounds.margin)/pixel));
+    const height=Math.max(1,Math.ceil((bounds.top-bounds.bottom+2*bounds.margin)/pixel));
+    const origin=height/2+(bounds.top+bounds.bottom)/(2*pixel);
+    const dx=(width-frame.cropWidth)/2,dy=origin-frame.originCropY;
+    return {...frame,cropWidth:width,cropHeight:height,originCropY:origin,matrix:frame.matrix.map((row,i)=>i<2?[row[0],row[1],row[2]+(i===0?dx:dy)]:row.slice())};
+  }
+  return {fit,fitShared,plan,centered,reframe};
 });

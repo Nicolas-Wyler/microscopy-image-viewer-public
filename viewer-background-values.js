@@ -27,5 +27,26 @@
     for(let i=0;i<values.length;i++){const a=image.values[i],b=base[i],value=Number.isFinite(a)&&Number.isFinite(b)?a-b+offset:NaN;values[i]=value;if(value>max)max=value;}
     return {width:image.width,height:image.height,values,max,bitsPerSample:image.bitsPerSample,sampleFormat:image.sampleFormat};
   }
-  return {blur,subtract};
+  function sampleRegion(image,polygon){
+    if(!Array.isArray(polygon)||polygon.length!==4||polygon.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))throw new Error('Invalid background region.');
+    const minX=Math.max(0,Math.floor(Math.min(...polygon.map(p=>p.x)))),maxX=Math.min(image.width,Math.ceil(Math.max(...polygon.map(p=>p.x))));
+    const minY=Math.max(0,Math.floor(Math.min(...polygon.map(p=>p.y)))),maxY=Math.min(image.height,Math.ceil(Math.max(...polygon.map(p=>p.y))));
+    let count=0,sum=0;
+    for(let y=minY;y<maxY;y++)for(let x=minX;x<maxX;x++){
+      const px=x+.5,py=y+.5;let positive=false,negative=false;
+      for(let i=0;i<4;i++){const a=polygon[i],z=polygon[(i+1)%4],cross=(z.x-a.x)*(py-a.y)-(z.y-a.y)*(px-a.x);if(cross>1e-8)positive=true;else if(cross< -1e-8)negative=true;}
+      if(positive&&negative)continue;
+      const index=y*image.width+x,v=image.values[index];if(!Number.isFinite(v))continue;
+      count++;sum+=v;
+    }
+    if(!count)throw new Error('The selected area contains no image pixels.');
+    return {mean:sum/count,count};
+  }
+  function subtractConstant(image,baseline,offset){
+    if(!Number.isFinite(baseline)||!Number.isFinite(offset))throw new Error('Invalid background level.');
+    const values=new Float32Array(image.values.length);let max=0;
+    for(let i=0;i<values.length;i++){const v=image.values[i];values[i]=Number.isFinite(v)?v-baseline+offset:NaN;if(values[i]>max)max=values[i];}
+    return {width:image.width,height:image.height,values,max,bitsPerSample:image.bitsPerSample,sampleFormat:image.sampleFormat};
+  }
+  return {blur,subtract,sampleRegion,subtractConstant};
 });

@@ -16,3 +16,17 @@ test('offline worker bundle matches the worker source files',()=>{
   const expected='self.__pixelWorkerBundled=true;self.window=self;self.__tiffWorkerContext=true;\n'+files.map(name=>fs.readFileSync(path.join(root,name),'utf8')).join('\n;\n');
   assert.equal(scope.window.PixelWorkerSource,expected);
 });
+
+test('a shared sampled level subtracts from an image without an assigned background',async()=>{
+  const image={width:2,height:1,values:Float32Array.from([100,300]),bitsPerSample:16,photometric:1},scope={window:{TiffImage:{values:async()=>image},ViewerBackgroundValues:math,addEventListener(){}},URL};
+  vm.createContext(scope);vm.runInContext(fs.readFileSync(path.join(root,'viewer-background.js'),'utf8'),scope);
+  const values=await scope.window.createViewerBackground().values({id:'i',file:{},backgroundId:''},3,'lin',10,{mean:150,bitsPerSample:16,photometric:1});
+  assert.deepEqual(Array.from(values.values),[-40,160]);
+});
+
+test('a grayscale sampled level can be applied to an RGB image of the same bit depth',async()=>{
+  const image={width:1,height:1,values:Float32Array.from([300]),bitsPerSample:16,photometric:2},scope={window:{TiffImage:{values:async()=>image},ViewerBackgroundValues:math,addEventListener(){}},URL};
+  vm.createContext(scope);vm.runInContext(fs.readFileSync(path.join(root,'viewer-background.js'),'utf8'),scope);
+  const values=await scope.window.createViewerBackground().values({id:'rgb',file:{}},0,'lin',0,{mean:100,bitsPerSample:16,photometric:1});
+  assert.equal(values.values[0],200);
+});

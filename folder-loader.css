@@ -102,6 +102,8 @@
 .project-save-status { margin:12px 0 0; color:#aab9b8; font-size:12px; line-height:1.4; }
 .project-save-status[data-state="error"] { color:#ffb7a7; }
 .project-sidebar label:not(:first-of-type) { margin-top:18px; }
+.project-sidebar label.project-negative { display:flex; align-items:center; gap:8px; }
+.project-sidebar .project-negative input { width:auto; margin:0; accent-color:#d8eb87; }
 .background-panel { margin-top:26px; border-top:1px solid #354044; padding-top:20px; }
 .background-panel select,.cjob-panel select,.image-background select,.image-zone select { width:100%; min-width:0; border:1px solid #536560; border-radius:6px; padding:8px; background:#141d1e; color:#edf4e9; font:inherit; font-size:14px; }
 .background-panel select:focus-visible,.cjob-panel select:focus-visible,.image-background select:focus-visible,.image-zone select:focus-visible {outline:2px solid #d8eb87;outline-offset:1px;}

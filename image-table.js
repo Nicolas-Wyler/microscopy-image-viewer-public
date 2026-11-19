@@ -231,5 +231,5 @@
   fit.addEventListener('click',()=>setZoom('fit'));native.addEventListener('click',()=>setZoom('native'));closeButton.addEventListener('click',closeInspector);
   dialog.addEventListener('click',event=>{if(event.target===dialog)closeInspector();});
   dialog.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeInspector();}});
-  window.ImageTable={start,reset,add,mutateProject,assignDose,assignDoseSeries,assignBackground,assignZone,refresh:()=>{if(list)render();},getSelectedIds:()=>[...selected],inspectBackground:(background,button)=>inspect(background,button,()=>getBackgrounds().some(item=>item.id===background.id))};
+  window.ImageTable={start,reset,add,mutateProject,assignDose,assignDoseSeries,assignBackground,assignZone,refresh:()=>{if(list)render();},clearThumbnails:()=>thumbs.clear(),refreshThumbnails:()=>{if(list){thumbs.clear();render();generateThumbnails(++epoch);}},getSelectedIds:()=>[...selected],inspectBackground:(background,button)=>inspect(background,button,()=>getBackgrounds().some(item=>item.id===background.id))};
 })();

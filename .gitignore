@@ -17,3 +17,7 @@ FORK.md
 GUIDE.md
 *.cjob
 *.xlif
+
+# Local exposure names and paths are private to this installation.
+recent-state-index.local.js
+recent-states/

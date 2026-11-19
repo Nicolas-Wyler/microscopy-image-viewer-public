@@ -8,9 +8,12 @@ self.onmessage=async event=>{
   try {
     let result;
     if(type==='values'){
-      result=await self.TiffImage.values(event.data.file);
+      result=await self.TiffImage.values(event.data.file,Boolean(event.data.negative));
       self.TiffImage.clearCache();
       self.postMessage({id,result},[result.values.buffer]);
+    } else if(type==='sampleRegion'){
+      result=await self.TiffImage.sampleRegion(event.data.file,event.data.polygon,Boolean(event.data.negative));
+      self.TiffImage.clearCache();self.postMessage({id,result});
     } else if(type==='blur'){
       const {values,width,height,sigma}=event.data;
       result=self.ViewerBackgroundValues.blur(values,width,height,sigma);

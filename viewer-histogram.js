@@ -28,7 +28,7 @@ window.createVisibleHistogram = function (canvas, normalized, portableSource) {
     canvas.style.right=right+'px';
     timer=setTimeout(async()=>{
       try {
-        const data=snapshot.filter !== 'image' ? filtered(snapshot.image) : snapshot.normalized ? await normalized.values(snapshot.entry,snapshot.sigma,snapshot.intensityScale,snapshot.zeroOffset) : await original(snapshot.entry,snapshot.side);
+        const data=snapshot.filter !== 'image' ? filtered(snapshot.image) : snapshot.normalized ? await normalized.values(snapshot.entry,snapshot.sigma,snapshot.intensityScale,snapshot.zeroOffset,snapshot.region) : await original(snapshot.entry,snapshot.side);
         if(id!==serial || !data) return;
         const m=snapshot.matrix, off=[0,0];
         const width=data.width,height=data.height, bins=new Uint32Array(160), norm=Math.max(1,data.max);

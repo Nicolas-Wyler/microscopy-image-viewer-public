@@ -7,22 +7,22 @@
   <meta name="description" content="Local microscopy image viewer.">
   <title>Microscopy image viewer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23d8eb87'/%3E%3Cpath d='M11 11h7v7h-7zm11 0h7v7h-7zm-11 11h7v7h-7zm11 0h7v7h-7z' fill='%23171b1d'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="folder-loader.css">
+  <link rel="stylesheet" href="folder-loader.css?v=negative-1">
   <script defer src="folder-validator.js?v=orientation-1"></script>
   <script defer src="table-project-store.js"></script>
   <script defer src="sidecar-magnification.js"></script>
   <script defer src="vendor/pako-inflate.min.js"></script>
   <script defer src="vendor/utif.js"></script>
-  <script defer src="pixel-worker-source.js?v=1"></script>
-  <script defer src="tiff-image.js?v=pixel-worker-1"></script>
+  <script defer src="pixel-worker-source.js?v=negative-1"></script>
+  <script defer src="tiff-image.js?v=negative-1"></script>
   <script defer src="image-table-state.js"></script>
-  <script defer src="image-table.js"></script>
+  <script defer src="image-table.js?v=negative-1"></script>
   <script defer src="cjob-model.js?v=wafer-mirror-1"></script>
   <script defer src="spot-grouping.js"></script>
   <script defer src="cjob-view.js?v=mirror-option-1"></script>
   <script defer src="mask-design-editor.js?v=mirror-preview-1"></script>
   <script defer src="project-sidebar.js"></script>
-  <script defer src="folder-loader.js?v=mirror-option-1"></script>
+  <script defer src="folder-loader.js?v=negative-1"></script>
   <link rel="stylesheet" href="styles.css?v=om13-inner-pair-2">
   <script defer src="data.js?v=1.0.6-om13"></script>
   <script defer src="project-storage.js?v=om13-1"></script>
@@ -83,6 +83,7 @@
       <input id="project-gap" type="text" placeholder="e.g. 2000" autocomplete="off">
       <label for="project-resist">Resist</label>
       <input id="project-resist" type="text" placeholder="Resist" autocomplete="off">
+      <label class="project-negative"><input id="project-negative" type="checkbox" disabled> Negative</label>
       <label for="project-description">Description</label>
       <textarea id="project-description" rows="4" placeholder="Notes about this project"></textarea>
       <label for="project-dose">Dose (mJ/cm²)</label>

@@ -96,7 +96,9 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
         console.warn('Could not restore rectangles for ' + key(context), error);
       }
     }
-    return doses.get(key(context));
+    const items = doses.get(key(context));
+    for (const [id, rect] of items) { const color=window.OM10SpotColors.forSpot(id); if(color && rect.color!==color) items.set(id,{...rect,color}); }
+    return items;
   }
   function save(context = getContext()) {
     try {
@@ -217,10 +219,15 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
       shape.classList.toggle('integral-outline', integral);
       const curve = shape.querySelector('.integral-profile');
       const maxLine = shape.querySelector('.integral-maximum'), maxCross = shape.querySelector('.integral-maximum-cross');
+      // Both curves share one plotting area, with their own display ranges:
+      // intensity and its derivative have different units.
+      const signalValues=(values||[]).filter(Number.isFinite),signalMin=signalValues.length?Math.min(...signalValues):0,signalMax=signalValues.length?Math.max(...signalValues):1;
+      const signalDisplay=value=>signalMax>signalMin?(value-signalMin)/(signalMax-signalMin):0;
+      const profileGap=8*rectScale, profileHeight=32*rectScale;
       const showMarker = integral && result?.position != null && result.curveValue != null;
       maxLine.toggleAttribute('hidden', !showMarker); maxCross.toggleAttribute('hidden', !showMarker);
       if (showMarker) {
-        const markerX=result.position*rectScale, markerY=-h/2-16*rectScale-96*rectScale*result.curveValue;
+        const markerX=result.position*rectScale, markerY=-h/2-profileGap-profileHeight*signalDisplay(result.curveValue);
         maxLine.setAttribute('d', `M${markerX} ${markerY}V0`);
         maxCross.setAttribute('d', `M${markerX-4} 0H${markerX+4} M${markerX} -4V4`);
       }
@@ -231,10 +238,10 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
       const showExtrema=Boolean(showDerivative && result.derivativeMaximumPosition !== null && result.derivativeMinimumPosition !== null);
       derivativeMax.toggleAttribute('hidden', !showExtrema); derivativeMin.toggleAttribute('hidden', !showExtrema);
       if (showDerivative) {
-        const maxAbs=Math.max(0,...result.derivative.filter(v=>v!==null).map(Math.abs)); let pen=false;
+        const validDerivative=result.derivative.filter(Number.isFinite), dMin=validDerivative.length?Math.min(...validDerivative):0,dMax=validDerivative.length?Math.max(...validDerivative):0; const derivativeDisplay=value=>dMax>dMin?(value-dMin)/(dMax-dMin):0; let pen=false;
         const path=result.derivative.map((value,i)=>{
           if(value===null){pen=false;return '';}
-          const dx=detail.positions[i]*rectScale, dy=-h/2-(150+28*(maxAbs>0?value/maxAbs:0))*rectScale;
+          const dx=detail.positions[i]*rectScale, dy=-h/2-profileGap-profileHeight*derivativeDisplay(value);
           const command=pen?'L':'M';pen=true;return `${command}${dx} ${dy}`;
         }).join(' ');
         derivativePath.setAttribute('d',path);
@@ -242,16 +249,17 @@ window.createGratingOverlay = function ({ store, viewport, getContext, getFieldE
           for (const [marker, position] of [[derivativeMax,result.derivativeMaximumPosition],[derivativeMin,result.derivativeMinimumPosition]]) {
             const index=detail.positions.indexOf(position), value=result.derivative[index];
             marker.setAttribute('cx', position*rectScale);
-            marker.setAttribute('cy', -h/2-(150+28*(maxAbs>0?value/maxAbs:0))*rectScale);
+            marker.setAttribute('cy', -h/2-profileGap-profileHeight*derivativeDisplay(value));
+            marker.setAttribute('r', 2 * rectScale);
           }
         }
       }
       curve.toggleAttribute('hidden', !values);
       if (values) {
-        const gap = 16 * rectScale, amplitude = 96 * rectScale; let pen = false;
+        const gap = profileGap, amplitude = profileHeight; let pen = false;
         const path = values.map((value, i) => {
           if (value === null) { pen = false; return ''; }
-          const x = detail.positions[i] * rectScale, y = -h / 2 - gap - amplitude * value;
+          const x = detail.positions[i] * rectScale, y = -h / 2 - gap - amplitude * signalDisplay(value);
           const command = pen ? 'L' : 'M'; pen = true; return `${command}${x} ${y}`;
         }).join(' ');
         curve.setAttribute('d', path);

@@ -23,13 +23,21 @@
   const state = { index: 0, view: 'cropped', filter: 'image', ready: false, scale: 1, fit: true, x: 0, y: 0, request: 0, drag: null };
   state.pictureSide = window.OM10Session.get('pictureSide', 'top') === 'bottom' ? 'bottom' : 'top';
   state.cleanImage = window.OM10Session.get('cleanImage', false) === true;
+  state.hideImage = window.OM10Session.get('hideImage', false) === true;
   state.backgroundMode=window.OM10Session.get('backgroundMode','original')==='normalized'?'normalized':'original';
   state.backgroundSigma=Number(window.OM10Session.get('backgroundSigma',3));if(!Number.isFinite(state.backgroundSigma)||state.backgroundSigma<0||state.backgroundSigma>100)state.backgroundSigma=3;
-  state.zeroOffset=Number(window.OM10Session.get('zeroOffset',0));if(!Number.isFinite(state.zeroOffset)||state.zeroOffset<0)state.zeroOffset=0;
+  state.zeroOffset=Number(window.OM10Session.get('zeroOffset',0));if(!Number.isFinite(state.zeroOffset))state.zeroOffset=0;
+  state.backgroundRegion=window.OM10Session.get('backgroundRegion',null);
+  if(!Number.isFinite(state.backgroundRegion?.mean))state.backgroundRegion=null;
+  if(state.backgroundRegion&&Boolean(state.backgroundRegion.negative)!==Boolean(data.negative)){
+    const max=2**state.backgroundRegion.bitsPerSample-1;
+    if(Number.isFinite(max)){state.backgroundRegion={...state.backgroundRegion,mean:max-state.backgroundRegion.mean,negative:Boolean(data.negative)};window.OM10Session.set('backgroundRegion',state.backgroundRegion);}else state.backgroundRegion=null;
+  }
   state.intensityScale=window.OM10Session.get('intensityScale','lin')==='log'?'log':'lin';
   const normalizedView=window.createViewerBackground();
   const histogram=window.createVisibleHistogram(byId('visible-histogram'),normalizedView,portableSource);
-  const isNormalized=entry=>state.backgroundMode==='normalized'&&Boolean(entry?.backgroundFile)&&!entry.backgroundError;
+  const hasBackground=(entry,region=state.backgroundRegion)=>Boolean(entry?.backgroundFile||region);
+  const isNormalized=entry=>state.backgroundMode==='normalized'&&hasBackground(entry)&&!entry.backgroundError;
 
   const edgeViews = window.createEdgeViews();
   const filterLabels = byId('filter-scharr') ? { image: 'Image', scharr: 'Edge contrast', canny: 'Canny' } : { image: 'Image', canny: 'Canny' };
@@ -125,8 +133,8 @@
       image.src = location.protocol === 'file:' && !intensitySrc.startsWith('blob:') ? await portableSource(intensitySrc) : intensitySrc;
       await image.decode(); return image;
     };
-    return { entry, pictureSide, intensitySource: entry.placeholder ? null : intensitySrc+(normalized?`|background|${entry.backgroundId}|${sigma}|${offset}`:'|original'),
-      intensityOffset:[0,0], backgroundMode:normalized?'normalized':'original',gaussianSigma:sigma,zeroOffset:offset,intensityScale,loadIntensityValues:normalized?()=>normalizedView.values(entry,sigma,intensityScale,offset):entry.file?()=>window.TiffImage.values(entry.file):null,loadIntensityImage,
+    return { entry, pictureSide, intensitySource: entry.placeholder ? null : intensitySrc+(normalized?`|background|${entry.backgroundId||JSON.stringify(state.backgroundRegion)}|${sigma}|${offset}`:'|original'),
+      intensityOffset:[0,0], backgroundMode:normalized?'normalized':'original',gaussianSigma:sigma,zeroOffset:offset,intensityScale,loadIntensityValues:normalized?()=>normalizedView.values(entry,sigma,intensityScale,offset,state.backgroundRegion):entry.file?()=>window.TiffImage.values(entry.file):null,loadIntensityImage,
       view: state.view, ready: state.ready, scale: state.scale, panX: state.x, panY: state.y,
       cleanImage: state.cleanImage, filter: state.filter, getMidpointMask, pickerRects: maskPicker?.guideRects,
       loadSnapMask: () => getMidpointMask() || midpointMask?.promise,
@@ -190,7 +198,10 @@
       grating.render();
     } });
 
-  const cleanButton = byId('clean-image');
+  const cleanButton = byId('clean-image'), hideButton = byId('hide-image');
+  function applyHideImage() { viewport.classList.toggle('hide-image', state.hideImage); hideButton.setAttribute('aria-pressed', String(state.hideImage)); hideButton.textContent = state.hideImage ? 'Show image' : 'Hide image'; }
+  hideButton.addEventListener('click', () => { state.hideImage = !state.hideImage; window.OM10Session.set('hideImage', state.hideImage); applyHideImage(); });
+  applyHideImage();
   const footer = document.querySelector('.viewer-footer');
   function applyCleanImage() {
     const clean = state.cleanImage;
@@ -280,7 +291,7 @@
     byId('selected-number').textContent = pad(entry.number);
     byId('dose-value').textContent = doseFormat.format(entry.dose);
     if(byId('exposure-field'))byId('exposure-field').textContent = entry.exposureField ?? 'Unknown';
-    byId('viewer-background-name').textContent=entry.backgroundName||'None';updateBackgroundControls(entry);
+    byId('viewer-background-name').textContent=entry.backgroundName||(state.backgroundRegion?`Area from ${state.backgroundRegion.sourceName}`:'None');updateBackgroundControls(entry);
     byId('magnification').textContent = Number.isFinite(entry.objectiveMagnification) ? `${entry.objectiveMagnification}×` : '—';
     byId('magnification').title = entry.objectiveName || 'Objective magnification from the Leica sidecar';
     window.OM10Filters.setPixelSize(entry.hasCalibration===false ? null : entry.pixelSizeUm);
@@ -377,10 +388,11 @@
     if (entry[side].placeholder) throw new Error('Image pixels unavailable in this image-free fork');
     // Native TIFF sampling needs no full-size PNG or image decode.
     const source = entry.file ? `native:${entry.id}:${side}` : entry[side].originalSrc;
-    const normalized=(settings.mode??state.backgroundMode)==='normalized'&&Boolean(entry.backgroundFile)&&!entry.backgroundError;
+    const region=Object.hasOwn(settings,'region')?settings.region:state.backgroundRegion;
+    const normalized=(settings.mode??state.backgroundMode)==='normalized'&&hasBackground(entry,region)&&!entry.backgroundError;
     const sigma=settings.sigma??state.backgroundSigma,offset=settings.offset??state.zeroOffset,scale=settings.scale??state.intensityScale;
-    const context = { intensitySource: source+(normalized?`|background|${entry.backgroundId}|${sigma}|${offset}`:'|original'), intensityOffset: [0,0],
-      loadIntensityValues:normalized?()=>normalizedView.values(entry,sigma,scale,offset):entry.file?()=>window.TiffImage.values(entry.file):null,
+    const context = { intensitySource: source+(normalized?`|background|${entry.backgroundId||JSON.stringify(region)}|${sigma}|${offset}`:'|original'), intensityOffset: [0,0],
+      loadIntensityValues:normalized?()=>normalizedView.values(entry,sigma,scale,offset,region):entry.file?()=>window.TiffImage.values(entry.file):null,
       loadIntensityImage: async () => {
         const image = new Image(); image.decoding = 'async';
         image.src = location.protocol === 'file:'&&!source.startsWith('blob:') ? await portableSource(source) : source;
@@ -522,7 +534,7 @@
       updateAnalysisImageNotice();lastPlotData=null;chart.replaceChildren();gapSection.hidden=true;stats.hidden=true;message.textContent='Updating wavelengths…';scheduleWavelengthAnalysis();
     });
     showAnalysisMode();
-    const settings=()=>({mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)});
+    const settings=()=>({mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,region:state.backgroundRegion,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)});
     async function run(requested){
       if(requested!==revision)return;
       if(data.importedProject&&!alignmentReady)return;
@@ -559,8 +571,8 @@
           if(currentPreview){for(const id of items.keys()){const point=currentPreview.centres.get(id);if(point)centres.set(id,point);}}
           else for(const [id,rect] of items){
             if(rect.shapeMode!=='integral'){centres.set(id,{measurementRaw:{x:rect.cx,y:rect.cy}});continue;}
-            const normalized=options.mode==='normalized'&&Boolean(entry.backgroundFile)&&!entry.backgroundError;
-            const centerKey=JSON.stringify(['native-intensity-v1',rect.cx,rect.cy,rect.width,rect.height,rect.angle,rect.positionMethod||'maximum',rect.signalRange??options.defaultSignalRange,rect.smoothingSigma??0,normalized?['background',entry.backgroundId,options.sigma,options.offset]:'original']);
+            const normalized=options.mode==='normalized'&&hasBackground(entry,options.region)&&!entry.backgroundError;
+            const centerKey=JSON.stringify(['native-intensity-v1',rect.cx,rect.cy,rect.width,rect.height,rect.angle,rect.positionMethod||'maximum',rect.signalRange??options.defaultSignalRange,rect.smoothingSigma??0,normalized?['background',entry.backgroundId||options.region,options.sigma,options.offset]:'original',...(data.negative?['negative']:[])]);
             keys.set(id,centerKey);const prior=saved[id];
             if(prior?.key===centerKey&&Number.isFinite(prior.point?.x)&&Number.isFinite(prior.point?.y))centres.set(id,{measurementRaw:prior.point});
             else needed.set(id,rect);
@@ -631,7 +643,7 @@
       return frame;
     }
     const original=entry.file ? await window.ViewerProject.imageUrl(entry) : entry.originalSrc, settings=window.OM10Filters.get();if(entry.file)entry.renderUrl=original;
-    let source=original;if(isNormalized(entry))try{source=(await normalizedView.get(entry,state.backgroundSigma,state.intensityScale,state.zeroOffset)).url;}catch(error){entry.backgroundError=error.message||'Background subtraction failed.';source=original;}
+    let source=original;if(isNormalized(entry))try{source=(await normalizedView.get(entry,state.backgroundSigma,state.intensityScale,state.zeroOffset,state.backgroundRegion)).url;}catch(error){entry.backgroundError=error.message||'Background subtraction failed.';source=original;}
 
     if(filter==='image') {frame.src=source;await frame.decode();return frame;}
     const defaults=settings.sigma===1 && (filter==='canny'
@@ -672,6 +684,7 @@
 
   async function selectImage(index, prepared = null, camera = cropCamera()) {
     if (index < 0 || index >= data.images.length) return;
+    cancelBackgroundSelection();
     byId('image-frame').hidden=false;maskPicker.close();
     if (!prepared) stopDoseHold();
     grating.finish();
@@ -684,6 +697,7 @@
     state.drag = null;
     viewport.classList.remove('is-panning');
     const entry = data.images[index];
+    window.OM10SpotColors.configure(data.maskDesign, entry);
     if (midpointMask?.entry !== entry) midpointMask = null;
     const filter = state.filter;
     // Leave the last complete image, metadata and annotations on screen until the swap.
@@ -710,7 +724,7 @@
       flushCamera();
       status.hidden = true;
       byId('view-status').textContent = entry.placeholder ? 'No image loaded'  : (filter === 'image' ? (data.importedProject?(view==='cropped'?(entry.alignment?.translationSource==='centered'?(entry.alignment.rotationKnown===false?'Rotation unavailable · spot translation unknown':'Rotation corrected · spot translation unknown'):entry.alignment?.recalibrated?'Recalibrated · zero-order centers':'Roughly aligned · check zero-order positions'):entry.hasCalibration?(entry.alignment?.recalibrated?'Original TIFF · recalibrated pixel scale':'Original TIFF · sidecar pixel scale'):'Original TIFF · calibration unavailable'):'Roughly aligned · overlay provisional') : `${filterLabels[filter]} · ${data.importedProject?(entry.hasCalibration?(entry.alignment?.recalibrated?'recalibrated':'sidecar pixel scale'):'calibration unavailable'):'overlay position provisional'}`);
-      if(state.backgroundMode==='normalized')byId('view-status').textContent=entry.backgroundError||(!entry.backgroundFile?'No background assigned · showing original':`Background: ${entry.backgroundName} · Gaussian σ ${state.backgroundSigma} px`);
+      if(state.backgroundMode==='normalized')byId('view-status').textContent=entry.backgroundError||(entry.backgroundFile?`Background: ${entry.backgroundName} · Gaussian σ ${state.backgroundSigma} px`:state.backgroundRegion?`Background: area from ${state.backgroundRegion.sourceName}`:'No background assigned · showing original');
       if (queuedCopy) {
         const { resnap } = queuedCopy;
         queuedCopy = null;
@@ -779,8 +793,8 @@
     image.style.transform = `matrix(${a}, ${b}, ${c}, ${d}, ${tx * state.scale}, ${ty * state.scale})`;
     image.classList.toggle('magnified-pixels', state.scale > 1);
     const entry=data.images[state.index],normalized=isNormalized(entry);
-    histogram.update({ready:state.ready&&!entry.placeholder,image,filter:state.filter,normalized,side:state.pictureSide,sigma:state.backgroundSigma,intensityScale:state.intensityScale,zeroOffset:state.zeroOffset,entry,matrix,scale:state.scale,panX:state.x,panY:state.y,frameWidth:width,frameHeight:height,viewportWidth:viewport.clientWidth,viewportHeight:viewport.clientHeight});
-    const marker=byId('gaussian-radius'),radius=state.backgroundSigma*state.scale*Math.hypot(matrix[0][0],matrix[1][0]);marker.toggleAttribute('hidden',!normalized);const diameter=Math.max(4,2*radius+4);marker.setAttribute('width',diameter);marker.setAttribute('height',diameter);const circle=marker.querySelector('circle');circle.setAttribute('cx',diameter/2);circle.setAttribute('cy',diameter/2);circle.setAttribute('r',radius);
+    histogram.update({ready:state.ready&&!entry.placeholder,image,filter:state.filter,normalized,side:state.pictureSide,sigma:state.backgroundSigma,intensityScale:state.intensityScale,zeroOffset:state.zeroOffset,region:state.backgroundRegion,entry,matrix,scale:state.scale,panX:state.x,panY:state.y,frameWidth:width,frameHeight:height,viewportWidth:viewport.clientWidth,viewportHeight:viewport.clientHeight});
+    const marker=byId('gaussian-radius'),radius=state.backgroundSigma*state.scale*Math.hypot(matrix[0][0],matrix[1][0]);marker.toggleAttribute('hidden',!normalized||!entry.backgroundFile);const diameter=Math.max(4,2*radius+4);marker.setAttribute('width',diameter);marker.setAttribute('height',diameter);const circle=marker.querySelector('circle');circle.setAttribute('cx',diameter/2);circle.setAttribute('cy',diameter/2);circle.setAttribute('r',radius);
 
     if (!state.cleanImage) {
       window.renderPitchRuler(viewport, displayedFrame, state.scale, state.x, state.y);
@@ -819,18 +833,42 @@
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!bgPanel.hidden){closeBgPanel();bgToggle.focus();event.preventDefault();event.stopPropagation();}},true);
   const gaussianInput=byId('background-sigma'),zeroOffsetInput=byId('zero-offset');gaussianInput.value=state.backgroundSigma;zeroOffsetInput.value=state.zeroOffset;
   function updateBackgroundControls(entry=data.images[state.index]){
-    const available=Boolean(entry?.backgroundFile&&!entry.backgroundError),active=isNormalized(entry);
-    byId('background-normalized').disabled=!available;byId('background-normalized').title=entry?.backgroundError||(!entry?.backgroundFile?'Assign a background in the import menu':`Subtract ${entry.backgroundName}`);
+    const available=Boolean(hasBackground(entry)&&!entry?.backgroundError),active=isNormalized(entry);
+    byId('background-normalized').disabled=!available;byId('background-normalized').title=entry?.backgroundError||(!hasBackground(entry)?'Assign a background or select an area':entry?.backgroundFile?`Subtract ${entry.backgroundName}`:'Subtract sampled background');
     byId('background-original').setAttribute('aria-pressed',String(!active));byId('background-normalized').setAttribute('aria-pressed',String(active));
     for(const scale of ['lin','log']){byId('intensity-'+scale).setAttribute('aria-pressed',String(state.intensityScale===scale));byId('intensity-'+scale).disabled=!available;}
-    gaussianInput.disabled=!available;zeroOffsetInput.disabled=!available;
+    gaussianInput.disabled=!entry?.backgroundFile||!available;zeroOffsetInput.disabled=!available;
+    byId('background-select-region').disabled=!entry?.file||entry.placeholder||Boolean(entry.backgroundFile)||!state.ready;
+    byId('background-clear-region').disabled=!state.backgroundRegion;
+    byId('background-region-status').textContent=state.backgroundRegion?`Area from ${state.backgroundRegion.sourceName}: mean ${Number(state.backgroundRegion.mean.toPrecision(6))} (${state.backgroundRegion.count} pixels). Used for images without a background.`:'Select an area in an image without an assigned background.';
   }
   function refreshBackground(){scheduleWavelengthAnalysis();midpointMask=null;compare?.refreshSide();for(const entry of data.images)compare?.invalidate(entry.filename);updateBackgroundControls();selectImage(state.index);}
+  const regionPicker=byId('background-region-picker'),regionBox=byId('background-region-box');let regionDrag=null,regionToken=0;
+  function cancelBackgroundSelection(){regionToken++;regionDrag=null;regionPicker.hidden=true;regionBox.hidden=true;}
+  byId('background-select-region').addEventListener('click',()=>{if(!state.ready||!data.images[state.index]?.file)return;closeBgPanel();regionPicker.hidden=false;regionPicker.focus();});
+  byId('background-clear-region').addEventListener('click',()=>{state.backgroundRegion=null;window.OM10Session.set('backgroundRegion',null);for(const e of data.images)if(!e.backgroundFile)e.backgroundError='';refreshBackground();});
+  function regionPoint(event){const bounds=regionPicker.getBoundingClientRect();return {x:event.clientX-bounds.left,y:event.clientY-bounds.top};}
+  function drawRegion(a,b){const left=Math.min(a.x,b.x),top=Math.min(a.y,b.y);regionBox.hidden=false;Object.assign(regionBox.style,{left:left+'px',top:top+'px',width:Math.abs(a.x-b.x)+'px',height:Math.abs(a.y-b.y)+'px'});}
+  regionPicker.addEventListener('pointerdown',event=>{if(event.button!==0||!state.ready)return;event.preventDefault();event.stopPropagation();regionDrag={id:event.pointerId,start:regionPoint(event),frame:displayedFrame,entry:data.images[state.index]};regionPicker.setPointerCapture(event.pointerId);drawRegion(regionDrag.start,regionDrag.start);});
+  regionPicker.addEventListener('pointermove',event=>{if(regionDrag?.id===event.pointerId)drawRegion(regionDrag.start,regionPoint(event));});
+  regionPicker.addEventListener('pointercancel',cancelBackgroundSelection);
+  regionPicker.addEventListener('pointerup',async event=>{
+    const drag=regionDrag;if(!drag||drag.id!==event.pointerId)return;const end=regionPoint(event);regionDrag=null;
+    if(Math.abs(end.x-drag.start.x)<2||Math.abs(end.y-drag.start.y)<2){cancelBackgroundSelection();return;}
+    const left=Math.min(drag.start.x,end.x),right=Math.max(drag.start.x,end.x),top=Math.min(drag.start.y,end.y),bottom=Math.max(drag.start.y,end.y),frame=drag.frame;
+    const raw=(x,y)=>window.GratingGeometry.inverseTransform({x:(x-viewport.clientWidth/2-state.x)/state.scale+frame.width/2,y:(y-viewport.clientHeight/2-state.y)/state.scale+frame.height/2},frame.matrix);
+    const polygon=[raw(left,top),raw(right,top),raw(right,bottom),raw(left,bottom)],token=++regionToken;
+    regionPicker.hidden=true;regionBox.hidden=true;byId('view-status').textContent='Measuring background area…';
+    try{const sample=await window.TiffImage.sampleRegion(drag.entry.file,polygon);if(token!==regionToken||drag.entry!==data.images[state.index])return;
+      state.backgroundRegion={...sample,sourceImageId:drag.entry.id,sourceName:drag.entry.name,polygon};window.OM10Session.set('backgroundRegion',state.backgroundRegion);for(const e of data.images)if(!e.backgroundFile)e.backgroundError='';refreshBackground();
+    }catch(error){if(token===regionToken){byId('view-status').textContent=error.message||'Could not measure background area.';}}
+  });
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!regionPicker.hidden){cancelBackgroundSelection();event.preventDefault();event.stopPropagation();}},true);
   for(const mode of ['original','normalized'])byId('background-'+mode).addEventListener('click',()=>{if(state.backgroundMode===mode)return;state.backgroundMode=mode;window.OM10Session.set('backgroundMode',mode);refreshBackground();});
   for(const scale of ['lin','log'])byId('intensity-'+scale).addEventListener('click',()=>{if(state.intensityScale===scale)return;state.intensityScale=scale;window.OM10Session.set('intensityScale',scale);refreshBackground();});
   for(const [input,key,max] of [[gaussianInput,'backgroundSigma',100],[zeroOffsetInput,'zeroOffset',Infinity]]){
     let editTimer=0;
-    function commit(){clearTimeout(editTimer);const n=input.valueAsNumber;if(!input.checkValidity()||!Number.isFinite(n)||n<0||n>max)return;if(state[key]===n&&state.backgroundMode==='normalized')return;state[key]=n;state.backgroundMode='normalized';window.OM10Session.set(key,n);window.OM10Session.set('backgroundMode','normalized');refreshBackground();}
+    function commit(){clearTimeout(editTimer);const n=input.valueAsNumber;if(!input.checkValidity()||!Number.isFinite(n)||(key==='backgroundSigma'&&n<0)||n>max)return;if(state[key]===n&&state.backgroundMode==='normalized')return;state[key]=n;state.backgroundMode='normalized';window.OM10Session.set(key,n);window.OM10Session.set('backgroundMode','normalized');refreshBackground();}
     input.addEventListener('input',()=>{clearTimeout(editTimer);editTimer=setTimeout(commit,250);});
     input.addEventListener('change',commit);
     input.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();event.stopPropagation();if(input.reportValidity())commit();});
@@ -1101,7 +1139,7 @@
     if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.target.isContentEditable ||
         event.target.closest?.('input, textarea, select, #rectangle-menu, #filter-parameters, #filter-parameters-toggle, #sidecar-dialog, #open-sidecar, #analysis-calculator, #analysis-calc-settings, #compare-histogram-settings, .compare-histogram-gear')) return;
     if (event.target.closest?.('#right-sidebar-tabs')) return;
-    if (event.key === ' ' && (event.target === cleanButton || (state.cleanImage && event.target.closest('button')))) return;
+    if (event.key === ' ' && (event.target === cleanButton || event.target === hideButton || (state.cleanImage && event.target.closest('button')))) return;
     if (!event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.stopPropagation();
       const next = event.key === 'ArrowRight';
@@ -1166,7 +1204,17 @@
       if(Number.isFinite(spot.x)&&Number.isFinite(spot.y))footprints.push({x:spot.x,y:spot.y,width:g.width,height:g.height});
     }
     if(!footprints.length)return null;
-    return {top:Math.max(...footprints.map(p=>p.y+p.height/2)),bottom:Math.min(...footprints.map(p=>p.y-p.height/2)),margin:Math.max(...footprints.map(p=>p.height))/2,maxX:Math.max(...footprints.map(p=>Math.abs(p.x)+p.width/2))};
+    return {top:Math.max(...footprints.map(p=>p.y+p.height/2)),bottom:Math.min(...footprints.map(p=>p.y-p.height/2)),margin:Math.max(...footprints.map(p=>Math.max(p.height,p.width)))*1.25,maxX:Math.max(...footprints.map(p=>Math.abs(p.x)+p.width/2))};
+  }
+  function updateAlignedCrop(){
+    const bounds=calibrationBounds(); if(!bounds)return;
+    for(const entry of data.images)for(const frame of [entry.top,entry.bottom]){
+      const a=frame.alignment, pixel=a?.alignedPixelUm;
+      if(!a || !(pixel>0) || !Array.isArray(frame.rawToCrop))continue;
+      const out=window.ViewerRecalibration.reframe({matrix:frame.rawToCrop,cropWidth:frame.cropWidth,cropHeight:frame.cropHeight,originCropY:a.originCropY??frame.cropHeight/2},bounds,pixel);
+      if(a.translationSource==='centered')out.matrix[1][2]=frame.rawToCrop[1][2]+(out.cropHeight-frame.cropHeight)/2;
+      frame.rawToCrop=out.matrix;frame.cropWidth=out.cropWidth;frame.cropHeight=out.cropHeight;frame.alignment={...a,originCropY:out.originCropY};
+    }
   }
   function applyCalibration(record){
     const plans=new Map(record.plan.images.map(p=>[p.id,p]));
@@ -1193,6 +1241,7 @@
       }
       entry.alignmentError=p.source==='centered'?'Rotation and scale corrected; spot translation is unknown':'';
     }
+    updateAlignedCrop();
     const rect=[...plans.values()].filter(p=>p.source==='rectangles').length,auto=[...plans.values()].filter(p=>p.source==='detection').length,missing=data.images.length-rect-auto;
     recalibrationStatus.textContent=`${record.fit.points} centers · ${Number(sharedPixel.toPrecision(7))} µm/px${Number.isFinite(record.fit.factor)?` · ×${record.fit.factor.toFixed(5)}`:''} · ${(record.fit.rotation*180/Math.PI).toFixed(3)}° · RMS ${record.fit.rmsUm.toFixed(2)} µm. ${rect} measured, ${auto} detected${missing?`, ${missing} centered without spot translation`:''}.`;recalibrationStatus.title=`${record.fit.points} zero-order centers from ${record.fit.images} images; ${rect} images aligned from rectangles, ${auto} from detection, ${missing} centered without spot translation.`;
     byId('viewer-alignment-status').textContent='Recalibrated from zero-order rectangles';
@@ -1203,7 +1252,7 @@
     if(!alignmentReady||!data.maskDesign)return;
     recalibrateButton.disabled=true;recalibrationStatus.textContent='Reading zero-order centers…';
     try{
-      grating.finish();const signature=calibrationSignature(),snapshots=zeroSnapshots(),before=snapshotKey(snapshots),settings={mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)},side=state.pictureSide;
+      grating.finish();const signature=calibrationSignature(),snapshots=zeroSnapshots(),before=snapshotKey(snapshots),settings={mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,region:state.backgroundRegion,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)},side=state.pictureSide;
       const observations=[];let skipped=0;
       for(let i=0;i<snapshots.length;i++){
         const {entry,zero}=snapshots[i],points=[];let profiles=new Map();
@@ -1216,7 +1265,7 @@
         observations.push({id:entry.id,width:entry.width,height:entry.height,pixelSizeUm:entry.basePixelSizeUm,points,roughPoints});
         if(i%8===0){recalibrationStatus.textContent=`Reading zero-order centers… ${i+1} / ${snapshots.length}`;await new Promise(resolve=>setTimeout(resolve,0));}
       }
-      if(side!==state.pictureSide||signature!==calibrationSignature()||before!==snapshotKey(zeroSnapshots())||JSON.stringify(settings)!==JSON.stringify({mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)}))throw new Error('Measurements or settings changed during recalibration. Please run it again.');
+      if(side!==state.pictureSide||signature!==calibrationSignature()||before!==snapshotKey(zeroSnapshots())||JSON.stringify(settings)!==JSON.stringify({mode:state.backgroundMode,sigma:state.backgroundSigma,offset:state.zeroOffset,scale:state.intensityScale,region:state.backgroundRegion,defaultSignalRange:window.OM10Session.get('integralDummyPercent',75)}))throw new Error('Measurements or settings changed during recalibration. Please run it again.');
       const fit=window.ViewerRecalibration.fitShared(observations);if(!fit)throw new Error('At least one image needs two distinct usable zero-order rectangle centers.');
       const bounds=calibrationBounds();if(!bounds)throw new Error('The mask design needs grating positions and dimensions.');
       const plan=window.ViewerRecalibration.plan(observations,fit,bounds);if(!plan)throw new Error('No calibrated image is available.');
@@ -1238,7 +1287,7 @@
       for(const frame of item.frames){if(!Number.isFinite(frame.pixelSizeUm)||frame.pixelSizeUm<=0||!Number.isFinite(frame.cropWidth)||frame.cropWidth<1||!Number.isFinite(frame.cropHeight)||frame.cropHeight<1||!Array.isArray(frame.rawToCrop)||frame.rawToCrop.length!==3||!frame.rawToCrop.every(row=>Array.isArray(row)&&row.length===3&&row.every(Number.isFinite)))return false;}}
     for(const entry of data.images){const item=entries.get(entry.id);entry.alignmentError=item.error||'';entry.roughMatches=Array.isArray(item.roughMatches)?item.roughMatches:[];[entry.top,entry.bottom].forEach((frame,index)=>{const value=item.frames[index];frame.pixelSizeUm=value.pixelSizeUm;frame.rawToCrop=value.rawToCrop;frame.cropWidth=value.cropWidth;frame.cropHeight=value.cropHeight;frame.alignment=value.alignment;if(value.alignment?.recalibrated){frame.hasCalibration=true;frame.calibrationSource='Zero-order recalibration';}});}return true;
   }
-  window.setupPositionsExport?.({data,finish:grating.finish,getRectangles:(entry,side)=>grating.rectanglesForExport(entry,side),background:normalizedView,getProcessing:()=>({backgroundMode:state.backgroundMode,backgroundSigma:state.backgroundSigma,zeroOffset:state.zeroOffset,intensityScale:state.intensityScale,displayFilter:state.filter,filters:window.OM10Filters.get(),defaultSignalRange:window.OM10Session.get('integralDummyPercent',75),pictureSide:state.pictureSide})});
+  window.setupPositionsExport?.({data,finish:grating.finish,getRectangles:(entry,side)=>grating.rectanglesForExport(entry,side),background:normalizedView,getProcessing:()=>({negative:Boolean(data.negative),backgroundMode:state.backgroundMode,backgroundSigma:state.backgroundSigma,backgroundRegion:state.backgroundRegion,zeroOffset:state.zeroOffset,intensityScale:state.intensityScale,displayFilter:state.filter,filters:window.OM10Filters.get(),defaultSignalRange:window.OM10Session.get('integralDummyPercent',75),pictureSide:state.pictureSide})});
   window.setupViewerState?.({data,alignmentSnapshot:savedStateAlignment,beforeSave:async()=>{
     if(data.importedProject&&data.maskDesign&&!alignmentReady)throw new Error('Wait for image alignment to finish before saving.');
     grating.finish();flushCamera();window.OM10Session.set('viewerDoseFilter',byId('viewer-dose-filter').value);window.OM10Session.set('viewerZoneFilter',byId('viewer-zone-filter').value);
@@ -1263,5 +1312,5 @@
   const restoredStateAlignment=Boolean(data.importedProject&&data.maskDesign&&restoreStateAlignment(savedAlignment));
   if(data.importedProject&&!visibleIndices.length){applyInitialFilters();window.restoreViewerPanels();}
   else selectImage(visibleIndices.includes(index)||!data.importedProject?index:visibleIndices[0], null, validCamera ? camera : null).then(() => {if(window.viewerProjectError){status.hidden=false;status.textContent='Could not restore project: '+window.viewerProjectError;}window.restoreViewerPanels();});
-  if(data.importedProject&&data.maskDesign){const notice=byId('viewer-alignment-status'),restored=restoredStateAlignment;notice.textContent=restored?'Restoring saved alignment…':'Finding zero-order spots…';(restored?Promise.resolve().then(()=>{const ref=data.images.find(e=>e.alignment&&e.alignment.translationSource!=='centered'),rotation=ref?.alignment?-ref.alignment.angle:0,centered=window.ViewerAlignment.complete(data,rotation,ref?.alignment?.alignedPixelUm,Boolean(ref?.alignment?.recalibrated),Boolean(ref),ref?{cropWidth:ref.cropWidth,cropHeight:ref.cropHeight,originCropY:ref.alignment.originCropY}:null);return {aligned:data.images.filter(e=>e.alignment?.translationSource!=='centered').length,total:data.images.length,centered};}):window.ViewerAlignment.run(data,(n,total)=>{notice.textContent=`Finding zero-order spots… ${n} / ${total}`;})).then(result=>{notice.textContent=`Rough alignment: ${result.aligned} / ${result.total} images`+(result.angle===null?' · rotation could not be estimated':result.aligned<result.total?' · remaining images corrected around their centers':'');const savedCalibration=window.OM10Session.get('recalibration-v1',null);if(savedCalibration?.version===1&&matchesCalibrationSignature(savedCalibration.signature))applyCalibration(savedCalibration);else if(savedCalibration)recalibrationStatus.textContent='Saved calibration does not match this project; recalibrate again.';scheduleWavelengthAnalysis();if(visibleIndices.includes(state.index))selectImage(state.index);}).catch(error=>{notice.textContent='Rough alignment failed: '+error.message;}).finally(()=>{alignmentReady=true;recalibrateButton.disabled=false;scheduleWavelengthAnalysis();});}
+  if(data.importedProject&&data.maskDesign){const notice=byId('viewer-alignment-status'),restored=restoredStateAlignment;notice.textContent=restored?'Restoring saved alignment…':'Finding zero-order spots…';(restored?Promise.resolve().then(()=>{const ref=data.images.find(e=>e.alignment&&e.alignment.translationSource!=='centered'),rotation=ref?.alignment?-ref.alignment.angle:0,centered=window.ViewerAlignment.complete(data,rotation,ref?.alignment?.alignedPixelUm,Boolean(ref?.alignment?.recalibrated),Boolean(ref),ref?{cropWidth:ref.cropWidth,cropHeight:ref.cropHeight,originCropY:ref.alignment.originCropY}:null);return {aligned:data.images.filter(e=>e.alignment?.translationSource!=='centered').length,total:data.images.length,centered};}):window.ViewerAlignment.run(data,(n,total)=>{notice.textContent=`Finding zero-order spots… ${n} / ${total}`;})).then(result=>{notice.textContent=`Rough alignment: ${result.aligned} / ${result.total} images`+(result.angle===null?' · rotation could not be estimated':result.aligned<result.total?' · remaining images corrected around their centers':'');const savedCalibration=window.OM10Session.get('recalibration-v1',null);if(savedCalibration?.version===1&&matchesCalibrationSignature(savedCalibration.signature))applyCalibration(savedCalibration);else if(savedCalibration)recalibrationStatus.textContent='Saved calibration does not match this project; recalibrate again.';updateAlignedCrop();scheduleWavelengthAnalysis();if(visibleIndices.includes(state.index))selectImage(state.index);}).catch(error=>{notice.textContent='Rough alignment failed: '+error.message;}).finally(()=>{alignmentReady=true;recalibrateButton.disabled=false;scheduleWavelengthAnalysis();});}
 })();
